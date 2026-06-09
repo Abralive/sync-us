@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>任務列表</title>
+  <style>
+    /* 基本版面，保持原有風格 */
+    body {font-family: Arial, sans-serif; margin: 20px; background:#f9f9f9;}
+    .container {max-width: 800px; margin:auto;}
+    .task {
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background:#fff;
+      transition: transform .3s ease, box-shadow .3s ease;
+    }
+    /* 動態縮放 – 依 priority 計算 */
+    .task[data-scale="1.0"] {transform: scale(1);   box-shadow:none;}
+    .task[data-scale="1.2"] {transform: scale(1.2); box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+    .task[data-scale="1.4"] {transform: scale(1.4); box-shadow:0 4px 8px rgba(0,0,0,0.15);}
+    .task[data-scale="1.6"] {transform: scale(1.6); box-shadow:0 6px 12px rgba(0,0,0,0.2);}
+    .task[data-scale="1.8"] {transform: scale(1.8); box-shadow:0 8px 16px rgba(0,0,0,0.25);}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div id="app"></div>
+</div>
+
+<script>
+/**
+ * 從後端抓取任務資料
+ * URL 必須指向 http://localhost:8000/api/v1/...
+ */
+async function loadTasks() {
+  try {
+    const response = await fetch('http://localhost:8000/api/v1/tasks');
+    if (!response.ok) throw new Error('Network response was not ok');
+    const tasks = await response.json();           // 預期 [{id, title, description, priority}]
+    renderTasks(tasks);
+  } catch (err) {
+    console.error('Fetch error:', err);
+    document.getElementById('app').innerHTML = '<p>無法取得任務資料</p>';
+  }
+}
+
+/**
+ * 依據後端回傳的資料產生任務卡片
+ * - 使用 Traditional Chinese UI 元素
+ * - 根據 priority 計算 scaling (1~5) → 1.0~1.8
+ */
+function renderTasks(tasks) {
+  const container = document.getElementById('app');
+  tasks.forEach(task => {
+    const scale = 1 + (task.priority - 1) * 0.2;   // priority 1 → 1.0, 5 → 1.8
+    const scaleStr = scale.toFixed(1);
+
+    const taskDiv = document.createElement('div');
+    taskDiv.className = 'task';
+    taskDiv.dataset.scale = scaleStr;
+
+    // 產生 Traditional Chinese UI
+    taskDiv.innerHTML = `
+      <h3>${task.title || '未命名任務'}</h3>
+      <p>${task.description || '無描述'}</p>
+      <p>優先級: ${task.priority}</p>
+    `;
+
+    container.appendChild(taskDiv);
+  });
+}
+
+// 程式入口
+loadTasks();
+</script>
+</body>
+</html>
