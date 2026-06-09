@@ -4,11 +4,9 @@ import AuthScreen from "./components/AuthScreen.jsx";
 import BottomNav from "./components/BottomNav.jsx";
 import BubbleGarden from "./components/BubbleGarden.jsx";
 import Header from "./components/Header.jsx";
-import Sidebar from "./components/Sidebar.jsx";
-import Stats from "./components/Stats.jsx";
+import ShopPage from "./components/ShopPage.jsx";
 import TaskBoard from "./components/TaskBoard.jsx";
 import TaskForm from "./components/TaskForm.jsx";
-import ViewTabs from "./components/ViewTabs.jsx";
 
 export default function App() {
   const [users, setUsers] = useState([]);
@@ -49,6 +47,7 @@ export default function App() {
     () => users.find((user) => user.id === Number(activeUser))?.username || "Sync",
     [users, activeUser]
   );
+  const stardust = tasks.filter((task) => task.is_completed).length * 12;
 
   function refresh() {
     setRefreshTick((tick) => tick + 1);
@@ -56,9 +55,8 @@ export default function App() {
 
   function handleTabChange(nextTab) {
     setActiveTab(nextTab);
-    if (nextTab === "shared") setView("shared");
+    if (nextTab === "home" || nextTab === "shared") setView("shared");
     if (nextTab === "tasks") setView("mine");
-    if (nextTab === "home") setView("shared");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -77,53 +75,32 @@ export default function App() {
 
   return (
     <main className="app-shell game-shell">
-      <Header
-        users={users}
-        activeUser={activeUser}
-        onActiveUserChange={setActiveUser}
-        onLogout={() => setIsAuthenticated(false)}
-      />
+      <Header users={users} activeUser={activeUser} onActiveUserChange={setActiveUser} onLogout={() => setIsAuthenticated(false)} />
 
       {(activeTab === "home" || activeTab === "shared") && (
-        <BubbleGarden
-          tasks={tasks}
-          stats={stats}
-          activeName={activeName}
-          onRefresh={refresh}
-          onAddTask={() => setActiveTab("tasks")}
-        />
+        <BubbleGarden tasks={tasks} stats={stats} activeName={activeName} onRefresh={refresh} onAddTask={() => setActiveTab("tasks")} />
       )}
 
       {activeTab === "tasks" && (
-        <section className="main-grid planner-panel" id="planner">
-          <div className="panel">
-            <div className="section-head">
-              <div>
-                <h2 className="section-title">任務管理</h2>
-                <p className="section-copy">新增、指派與整理任務。泡泡本身放在泡泡星域中照顧。</p>
-              </div>
-              <ViewTabs view={view} onViewChange={setView} />
-            </div>
-
-            <Stats stats={stats} activeName={activeName} tasks={tasks} />
-            <TaskForm users={users} activeUser={activeUser} onCreated={refresh} />
-            {error && <div className="error">{error}</div>}
-            <TaskBoard tasks={tasks} onRefresh={refresh} />
+        <section className="growth-page">
+          <div className="growth-intro">
+            <span className="garden-kicker">Growth Bubbles</span>
+            <h2>照顧新的泡泡</h2>
+            <p>這裡不是任務 dashboard，只是把需要一起完成的事種成泡泡。細節留給泡泡自己長大。</p>
           </div>
-          <Sidebar tasks={tasks} />
+          <TaskForm users={users} activeUser={activeUser} onCreated={refresh} />
+          {error && <div className="error">{error}</div>}
+          <TaskBoard tasks={tasks} />
         </section>
       )}
 
-      {activeTab === "shop" && (
-        <section className="shop-screen">
-          <Sidebar tasks={tasks} />
-        </section>
-      )}
+      {activeTab === "shop" && <ShopPage stardust={stardust} />}
 
       {activeTab === "profile" && (
-        <section className="panel profile-screen">
-          <h2 className="section-title">我的狀態</h2>
-          <Stats stats={stats} activeName={activeName} tasks={tasks} />
+        <section className="profile-page panel">
+          <span className="garden-kicker">Profile</span>
+          <h2>我的狀態</h2>
+          <p>{activeName} 正在照顧 {stats?.total || 0} 顆泡泡，已累積 {stardust} 星塵。</p>
           <button className="btn" onClick={() => setIsAuthenticated(false)}>登出</button>
         </section>
       )}

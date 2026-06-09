@@ -44,56 +44,37 @@ export default function TaskForm({ users, activeUser, onCreated }) {
   }
 
   return (
-    <form onSubmit={submit} className="form-grid">
-      <div className="field span-4">
-        <label>任務標題</label>
+    <form onSubmit={submit} className="growth-form">
+      <label>
+        要一起照顧什麼？
         <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="例：訂週末晚餐" />
-      </div>
-      <div className="field span-4">
-        <label>任務描述</label>
-        <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="簡短說明即可" />
-      </div>
-      <div className="field span-4">
-        <label>截止時間</label>
+      </label>
+      <label>
+        什麼時候前？
         <input type="datetime-local" value={form.due_time} onChange={(event) => setForm({ ...form, due_time: event.target.value })} />
-      </div>
-      <div className="field span-3">
-        <label>指派對象</label>
-        <select value={form.assigned_to_id} onChange={(event) => setForm({ ...form, assigned_to_id: event.target.value })}>
-          <option value="">未指定</option>
-          {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
-        </select>
-      </div>
-      <div className="field span-3">
-        <label>提醒</label>
-        <select value={form.reminder_minutes} onChange={(event) => setForm({ ...form, reminder_minutes: event.target.value })}>
-          <option value="15">15 分鐘前</option>
-          <option value="60">1 小時前</option>
-          <option value="180">3 小時前</option>
-          <option value="1440">1 天前</option>
-        </select>
-      </div>
-      <div className="field span-3">
-        <label>權重 {form.priority_weight}</label>
-        <div className="range-card">
+      </label>
+      <label>
+        補充一句話
+        <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="例：確認餐廳與時間" />
+      </label>
+      <div className="growth-row">
+        <label>
+          交給誰
+          <select value={form.assigned_to_id} onChange={(event) => setForm({ ...form, assigned_to_id: event.target.value })}>
+            <option value="">一起照顧</option>
+            {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+          </select>
+        </label>
+        <label>
+          重要度 {form.priority_weight}
           <input type="range" min="1" max="100" value={form.priority_weight} onChange={(event) => setForm({ ...form, priority_weight: event.target.value })} />
-        </div>
-      </div>
-      <div className="field span-3">
-        <label>模式</label>
-        <label className="private-toggle">
-          <input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />
-          私人任務
         </label>
       </div>
-      <div className="field span-7">
-        <label>協作備註</label>
-        <textarea value={form.collaboration_note} onChange={(event) => setForm({ ...form, collaboration_note: event.target.value })} placeholder="例：我先查餐廳，你決定時間。" />
-      </div>
-      <div className="field span-5">
-        <label>建立</label>
-        <button className="btn primary" disabled={submitting}>{submitting ? "建立中..." : "建立任務泡泡"}</button>
-      </div>
+      <label className="quiet-toggle">
+        <input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />
+        這是自己的小軌道
+      </label>
+      <button className="btn primary" disabled={submitting}>{submitting ? "建立中..." : "長出一顆泡泡"}</button>
     </form>
   );
 }
