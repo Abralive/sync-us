@@ -13,7 +13,8 @@ export default function TaskCard({ task, onRefresh, variant = "card", index = 0,
   const isUrgent = !task.is_completed && new Date(task.due_time) - new Date() < task.reminder_minutes * 60000;
   const weightTone = task.priority_weight >= 80 ? "heavy" : task.priority_weight >= 55 ? "medium" : "light";
 
-  async function toggleDone() {
+  async function toggleDone(event) {
+    event?.stopPropagation();
     await request(`/tasks/${task.id}`, {
       method: "PUT",
       body: JSON.stringify({ is_completed: !task.is_completed }),
@@ -56,6 +57,7 @@ export default function TaskCard({ task, onRefresh, variant = "card", index = 0,
         <span className="bubble-glass"></span>
         <span className="bubble-sheen"></span>
         <span className="task-bubble-core"></span>
+        <span className="garden-title">{task.title}</span>
         <span className="garden-date">{formatDateTime(task.due_time)}</span>
         {drop && <RewardFall drop={drop} />}
       </button>
