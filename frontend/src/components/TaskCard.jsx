@@ -76,19 +76,19 @@ export default function TaskCard({ task, onRefresh, variant = "card", index = 0,
 
       <div className="task-content">
         <div className="task-meta">
-          <span className="pill">{task.is_private ? "私人軌道" : "共享世界"}</span>
-          <span className="pill">權重 {task.priority_weight}</span>
+          <span className="pill">{task.is_private ? "私人軌道" : "共享星域"}</span>
+          <span className="pill">重要度 {task.priority_weight}</span>
           {isUrgent && <span className="pill urgent">提醒中</span>}
         </div>
         <h3 className={`task-title ${task.is_completed ? "done" : ""}`}>{task.title}</h3>
         <p className="task-detail">{formatDateTime(task.due_time)} · {countdownText(task.due_time)}</p>
         {task.description && <p className="task-detail">{task.description}</p>}
-        {task.assigned_to_name && <p className="task-detail">指派給 {task.assigned_to_name}</p>}
+        {task.assigned_to_name && <p className="task-detail">交給 {task.assigned_to_name}</p>}
         {task.collaboration_note && <p className="task-detail">{task.collaboration_note}</p>}
         <div className="bubble-actions">
-          <button className="btn primary" onClick={toggleDone}>{task.is_completed ? "恢復任務" : "標記完成"}</button>
+          <button className="btn primary" onClick={toggleDone}>{task.is_completed ? "恢復照顧" : "標記完成"}</button>
           <button className="btn reward-btn" onPointerDown={startHold} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} disabled={!task.is_completed}>
-            {holding ? "蓄力中..." : "長按戳破"}
+            {holding ? "快破了..." : "長按戳破"}
           </button>
         </div>
       </div>
@@ -101,7 +101,7 @@ function RewardFall({ drop }) {
     <div className="reward-fall">
       <span className={`drop-object ${drop.icon}`}></span>
       <span className="drop-label">{drop.label}</span>
-      <span className="dust-result">轉成 {drop.dust} 星塵</span>
+      <span className="dust-result">獲得 {drop.dust} 星塵</span>
     </div>
   );
 }

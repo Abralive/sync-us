@@ -6,7 +6,7 @@ export default function ShopPage({ stardust }) {
       <div className="shop-hero panel">
         <span className="garden-kicker">Stardust Shop</span>
         <h2>星塵補給站</h2>
-        <p>把一起完成的事，換成小禮物、約會選擇權，或共享星域的裝飾。</p>
+        <p>把一起完成的泡泡，換成小小的共同獎勵。生活已經夠忙了，至少獎勵要可愛一點。</p>
         <strong>{stardust} 星塵</strong>
       </div>
       <div className="shop-grid">

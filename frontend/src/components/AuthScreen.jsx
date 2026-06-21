@@ -16,10 +16,10 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
     try {
       if (mode === "login") {
         const user = users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-        if (!user) throw new Error("找不到這個 Email，請先註冊。");
+        if (!user) throw new Error("找不到這個 Email，先註冊一個小星球。");
         onAuthenticated(user.id);
       } else {
-        if (!username.trim()) throw new Error("請輸入使用者名稱。");
+        if (!username.trim()) throw new Error("請幫這顆小星球取個名字。");
         const created = await request("/users", {
           method: "POST",
           body: JSON.stringify({ username: username.trim(), email: email.trim() }),
@@ -41,14 +41,14 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
           <div className="brand-mark"></div>
           <div>
             <h1 className="brand-title">Sync-Us</h1>
-            <p className="brand-subtitle">Shared Orbit Planner</p>
+            <p className="brand-subtitle">Bubble Growth App</p>
           </div>
         </div>
 
         <div className="auth-hero">
           <Sparkles size={20} />
-          <h2>{mode === "login" ? "登入共享軌道" : "建立你的帳號"}</h2>
-          <p>先用簡化帳號流程試用。正式上架前，這裡會接上密碼、驗證信與安全登入。</p>
+          <h2>{mode === "login" ? "回到你們的小宇宙" : "建立你的第一顆星球"}</h2>
+          <p>先進入自己的軌道，再選擇要和誰連成共享星域。不是開會，是讓彼此的努力比較不會失蹤。</p>
         </div>
 
         <div className="auth-tabs">
@@ -65,7 +65,7 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
         <form className="auth-form" onSubmit={submit}>
           {mode === "register" && (
             <label>
-              使用者名稱
+              你的名字
               <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Mina" />
             </label>
           )}
@@ -76,7 +76,7 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
           {error && <div className="error">{error}</div>}
           <button className="btn primary auth-submit" disabled={loading}>
             <Heart size={18} />
-            {loading ? "處理中..." : mode === "login" ? "登入" : "建立帳號"}
+            {loading ? "處理中..." : mode === "login" ? "進入星域" : "建立星球"}
           </button>
         </form>
 

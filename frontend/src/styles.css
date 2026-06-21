@@ -998,19 +998,22 @@ button { cursor: pointer; border: 0; }
 
 .growth-page,
 .shop-page,
-.profile-page {
+.profile-page,
+.connect-page {
   display: grid;
   gap: 16px;
 }
 
 .growth-intro,
-.shop-hero {
+.shop-hero,
+.connect-hero {
   padding: 8px 6px 0;
 }
 
 .growth-intro h2,
 .shop-hero h2,
-.profile-page h2 {
+.profile-page h2,
+.connect-hero h2 {
   margin: 8px 0 10px;
   font-size: clamp(34px, 6vw, 54px);
   line-height: 1;
@@ -1018,10 +1021,187 @@ button { cursor: pointer; border: 0; }
 
 .growth-intro p,
 .shop-hero p,
-.profile-page p {
+.profile-page p,
+.connect-hero p {
   margin: 0;
   color: var(--muted);
   line-height: 1.7;
+}
+
+.connect-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.76);
+  background:
+    radial-gradient(circle at 82% 10%, rgba(226,184,92,0.16), transparent 24%),
+    rgba(255,253,248,0.78);
+  box-shadow: var(--shadow);
+}
+
+.connect-card.linked {
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+}
+
+.connect-card h3,
+.connect-notes h3 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.connect-card p,
+.connect-notes p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.connect-orbit {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 1px solid rgba(36,48,51,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+}
+
+.connect-orbit span {
+  position: relative;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 28%, white, rgba(111,167,161,0.64));
+  color: var(--ink);
+  font-weight: 900;
+  box-shadow: 0 10px 20px rgba(36,48,51,0.1);
+}
+
+.connect-orbit span:last-child {
+  background: radial-gradient(circle at 30% 28%, white, rgba(232,130,109,0.64));
+}
+
+.connect-orbit i {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--teal), var(--coral));
+}
+
+.connect-methods {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 6px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid var(--line);
+}
+
+.connect-methods button {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.connect-methods button.active {
+  background: var(--ink);
+  color: white;
+}
+
+.connect-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.connect-field select {
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.82);
+  padding: 0 14px;
+}
+
+.connect-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid var(--line);
+}
+
+.connect-preview svg {
+  flex: 0 0 auto;
+  color: var(--gold);
+}
+
+.connect-preview strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.icon-pill {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.8);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.connect-submit {
+  min-height: 52px;
+}
+
+.connect-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.connect-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.connect-notes article,
+.connect-inline {
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid var(--line);
+}
+
+.connect-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .growth-form {
@@ -1317,6 +1497,31 @@ button { cursor: pointer; border: 0; }
 
   .care-item {
     align-items: start;
+    display: grid;
+  }
+
+  .connect-card.linked {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-orbit {
+    margin: 0 auto;
+  }
+
+  .connect-methods {
+    grid-template-columns: 1fr;
+    border-radius: 20px;
+  }
+
+  .connect-methods button {
+    min-height: 46px;
+  }
+
+  .connect-notes {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-inline {
     display: grid;
   }
 

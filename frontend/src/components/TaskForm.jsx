@@ -12,7 +12,7 @@ const initialForm = {
   collaboration_note: "",
 };
 
-export default function TaskForm({ users, activeUser, onCreated }) {
+export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,7 +33,7 @@ export default function TaskForm({ users, activeUser, onCreated }) {
           assigned_to_id: form.assigned_to_id ? Number(form.assigned_to_id) : null,
           priority_weight: Number(form.priority_weight),
           reminder_minutes: Number(form.reminder_minutes),
-          couple_id: 1,
+          couple_id: coupleId,
         }),
       });
       setForm(initialForm);
@@ -46,7 +46,7 @@ export default function TaskForm({ users, activeUser, onCreated }) {
   return (
     <form onSubmit={submit} className="growth-form">
       <label>
-        要一起照顧什麼？
+        這顆泡泡要照顧什麼？
         <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="例：訂週末晚餐" />
       </label>
       <label>
@@ -55,7 +55,7 @@ export default function TaskForm({ users, activeUser, onCreated }) {
       </label>
       <label>
         補充一句話
-        <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="例：確認餐廳與時間" />
+        <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="例：不要再到當天才想起來" />
       </label>
       <div className="growth-row">
         <label>
@@ -74,7 +74,7 @@ export default function TaskForm({ users, activeUser, onCreated }) {
         <input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />
         這是自己的小軌道
       </label>
-      <button className="btn primary" disabled={submitting}>{submitting ? "建立中..." : "長出一顆泡泡"}</button>
+      <button className="btn primary" disabled={submitting}>{submitting ? "長泡泡中..." : "長出一顆泡泡"}</button>
     </form>
   );
 }
