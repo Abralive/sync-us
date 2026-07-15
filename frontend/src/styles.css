@@ -1402,13 +1402,16 @@ button { cursor: pointer; border: 0; }
 
 /* ===== Segmented control (home) ===== */
 .seg-control {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  width: fit-content;
+  max-width: 100%;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(86px, auto));
   gap: 6px;
-  margin: 14px 0 12px;
+  margin: 6px auto 12px;
   padding: 5px;
-  border-radius: 16px;
-  background: rgba(36,48,51,0.06);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(36,48,51,0.08);
 }
 
 .seg {
@@ -1416,12 +1419,13 @@ button { cursor: pointer; border: 0; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 42px;
+  min-height: 38px;
+  padding: 0 14px;
   border: none;
-  border-radius: 12px;
+  border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -1449,28 +1453,45 @@ button { cursor: pointer; border: 0; }
 
 /* ===== Adaptive bubble field (no clipping) ===== */
 .bubble-field {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 16px 12px;
-  padding: 24px 10px;
-  min-height: 300px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,247,236,0.45));
+  position: relative;
+  min-height: clamp(520px, 62vh, 680px);
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 22%, rgba(111,167,161,0.14), transparent 22%),
+    radial-gradient(circle at 78% 18%, rgba(232,130,109,0.12), transparent 20%),
+    linear-gradient(180deg, rgba(255,253,248,0.78), rgba(255,247,236,0.42));
   border: 1px solid rgba(36,48,51,0.06);
 }
 
 .bubble-field .garden-bubble-orb {
-  position: relative;
-  left: auto;
-  right: auto;
-  top: auto;
-  bottom: auto;
-  width: 150px;
+  position: absolute;
   margin: 0;
-  flex: 0 0 auto;
 }
+
+.bubble-field::before,
+.bubble-field::after {
+  content: "";
+  position: absolute;
+  border: 1px solid rgba(36,48,51,0.045);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.bubble-field::before {
+  inset: 8% 10%;
+}
+
+.bubble-field::after {
+  inset: 25% 24%;
+}
+
+.bubble-field .garden-bubble-orb:nth-of-type(1) { left: 20%; top: 12%; width: 168px; }
+.bubble-field .garden-bubble-orb:nth-of-type(2) { right: 20%; top: 26%; width: 150px; }
+.bubble-field .garden-bubble-orb:nth-of-type(3) { left: 38%; top: 46%; width: 184px; }
+.bubble-field .garden-bubble-orb:nth-of-type(4) { left: 14%; bottom: 12%; width: 132px; }
+.bubble-field .garden-bubble-orb:nth-of-type(5) { right: 16%; bottom: 10%; width: 126px; }
+.bubble-field .garden-bubble-orb:nth-of-type(n + 6) { left: 50%; top: 62%; width: 120px; }
 
 .field-empty {
   margin: auto;
@@ -2084,6 +2105,12 @@ button { cursor: pointer; border: 0; }
     display: grid;
   }
 
+  .seg-control {
+    margin-left: auto;
+    margin-right: auto;
+    grid-template-columns: repeat(2, minmax(80px, auto));
+  }
+
   .growth-row {
     grid-template-columns: 1fr;
   }
@@ -2148,6 +2175,18 @@ button { cursor: pointer; border: 0; }
     border-radius: 28px;
     padding: 22px 18px 18px;
   }
+
+  .bubble-field {
+    min-height: 610px;
+    border-radius: 24px;
+  }
+
+  .bubble-field .garden-bubble-orb:nth-of-type(1) { left: 22px; top: 32px; width: 148px; }
+  .bubble-field .garden-bubble-orb:nth-of-type(2) { right: 26px; top: 158px; width: 128px; }
+  .bubble-field .garden-bubble-orb:nth-of-type(3) { left: 82px; top: 300px; width: 158px; }
+  .bubble-field .garden-bubble-orb:nth-of-type(4) { right: 28px; top: 462px; width: 116px; }
+  .bubble-field .garden-bubble-orb:nth-of-type(5) { left: 28px; top: 474px; width: 112px; }
+  .bubble-field .garden-bubble-orb:nth-of-type(n + 6) { left: 140px; top: 482px; width: 108px; }
 
   .bubble-orb {
     width: 108px;
