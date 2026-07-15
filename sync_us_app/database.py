@@ -14,6 +14,12 @@ TASK_COLUMNS = {
     "reminder_minutes": "INTEGER NOT NULL DEFAULT 60",
     "collaboration_note": "TEXT NOT NULL DEFAULT ''",
     "matched_task_id": "INTEGER",
+    "completed_at": "TEXT",
+    "completed_by_id": "INTEGER",
+    "confirmed": "INTEGER NOT NULL DEFAULT 0",
+    "confirmed_at": "TEXT",
+    "confirmed_by_id": "INTEGER",
+    "stardust_awarded": "INTEGER NOT NULL DEFAULT 0",
     "updated_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
     "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
 }
@@ -21,6 +27,10 @@ TASK_COLUMNS = {
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def utc_now_dt() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def connect() -> sqlite3.Connection:

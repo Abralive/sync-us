@@ -12,13 +12,27 @@ const initialForm = {
   collaboration_note: "",
 };
 
+function localMinNow() {
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  return now.toISOString().slice(0, 16);
+}
+
 export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   async function submit(event) {
     event.preventDefault();
-    if (!form.title.trim() || !form.due_time) return;
+    setError("");
+    if (!form.title.trim() || !form.due_time) {
+      setError("請填寫標題與到期時間。");
+      return;
+    }
+    if (new Date(form.due_time).getTime() <= Date.now()) {
+      setError("到期時間必須是未來時間（避免回填刷星塵）。");
+      return;
+    }
     setSubmitting(true);
     try {
       await request("/tasks", {
@@ -38,6 +52,8 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
       });
       setForm(initialForm);
       onCreated();
+    } catch (err) {
+      setError(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -51,7 +67,7 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
       </label>
       <label>
         什麼時候前？
-        <input type="datetime-local" value={form.due_time} onChange={(event) => setForm({ ...form, due_time: event.target.value })} />
+        <input type="datetime-local" min={localMinNow()} value={form.due_time} onChange={(event) => setForm({ ...form, due_time: event.target.value })} />
       </label>
       <label>
         補充一句話
@@ -74,6 +90,7 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
         <input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />
         這是自己的小軌道
       </label>
+      {error && <div className="error">{error}</div>}
       <button className="btn primary" disabled={submitting}>{submitting ? "長泡泡中..." : "長出一顆泡泡"}</button>
     </form>
   );

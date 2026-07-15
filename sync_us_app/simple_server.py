@@ -1,10 +1,11 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+import base64
 import json
 import mimetypes
 
 from . import services
-from .config import FRONTEND_DIR, FRONTEND_DIST_DIR, INDEX_PATH
+from .config import AUTH_ENABLED, AUTH_PASSWORD, AUTH_USER, FRONTEND_DIR, FRONTEND_DIST_DIR, INDEX_PATH
 from .database import init_db
 
 
@@ -12,14 +13,37 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("[%s] %s" % (self.log_date_time_string(), fmt % args))
 
+    def _authorized(self) -> bool:
+        if not AUTH_ENABLED:
+            return True
+        header = self.headers.get("Authorization", "")
+        if not header.startswith("Basic "):
+            return False
+        try:
+            user, _, password = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+        except (ValueError, UnicodeDecodeError):
+            return False
+        return user == AUTH_USER and password == AUTH_PASSWORD
+
+    def _require_auth(self) -> None:
+        body = '{"detail": "需要存取密碼"}'.encode("utf-8")
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Sync-Us"')
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_GET(self):
+        if not self._authorized():
+            return self._require_auth()
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
 
@@ -44,7 +68,13 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
                 user_id=parse_optional_int(query, "user_id"),
                 view=query.get("view", ["all"])[0],
             ),
+            "/api/v1/tasks/completed": lambda: services.list_completed(
+                couple_id=parse_optional_int(query, "couple_id"),
+                user_id=parse_optional_int(query, "user_id"),
+                view=query.get("view", ["all"])[0],
+            ),
             "/api/v1/stats": lambda: services.get_stats(parse_optional_int(query, "couple_id") or 1),
+            "/api/v1/stardust": lambda: services.get_stardust(parse_optional_int(query, "couple_id") or 1),
         }
 
         if parsed.path in routes:
@@ -63,6 +93,8 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"detail": "Not found"}, 404)
 
     def do_POST(self):
+        if not self._authorized():
+            return self._require_auth()
         parsed = urlparse(self.path)
         if parsed.path == "/api/v1/tasks":
             self.call_json(lambda: services.create_task(self.read_json()), 201)
@@ -70,10 +102,18 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.call_json(lambda: services.create_user(self.read_json()), 201)
         elif parsed.path == "/api/v1/couples":
             self.call_json(lambda: services.create_couple(self.read_json()), 201)
+        elif parsed.path.startswith("/api/v1/tasks/") and parsed.path.endswith("/complete"):
+            body = self.read_json()
+            self.call_json(lambda: services.complete_task(action_id(parsed.path), body.get("user_id")))
+        elif parsed.path.startswith("/api/v1/tasks/") and parsed.path.endswith("/confirm"):
+            body = self.read_json()
+            self.call_json(lambda: services.confirm_task(action_id(parsed.path), body.get("user_id")))
         else:
             self.send_json({"detail": "Not found"}, 404)
 
     def do_PUT(self):
+        if not self._authorized():
+            return self._require_auth()
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/v1/tasks/"):
             self.call_json(lambda: services.update_task(path_id(parsed.path), self.read_json()))
@@ -81,6 +121,8 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"detail": "Not found"}, 404)
 
     def do_DELETE(self):
+        if not self._authorized():
+            return self._require_auth()
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/v1/tasks/"):
             self.call_json(lambda: services.delete_task(path_id(parsed.path)))
@@ -94,6 +136,8 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"detail": str(exc)}, 404)
         except services.ConflictError as exc:
             self.send_json({"detail": str(exc)}, 409)
+        except services.ValidationError as exc:
+            self.send_json({"detail": str(exc)}, 400)
         except (KeyError, ValueError, TypeError) as exc:
             self.send_json({"detail": f"Invalid request: {exc}"}, 400)
 
@@ -138,6 +182,11 @@ def parse_optional_int(query: dict, key: str) -> int | None:
 
 def path_id(path: str) -> int:
     return int(path.rstrip("/").rsplit("/", 1)[-1])
+
+
+def action_id(path: str) -> int:
+    # /api/v1/tasks/{id}/complete -> {id}
+    return int(path.rstrip("/").split("/")[-2])
 
 
 def run(host: str = "127.0.0.1", port: int = 8000):

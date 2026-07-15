@@ -12,6 +12,8 @@ __pycache__/
 *.sqlite3
 *.log
 server.*.log
+cloudflared.exe
+start_sync_us.bat
 
 # Frontend dependencies and build output
 frontend/node_modules/

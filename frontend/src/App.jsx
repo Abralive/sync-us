@@ -12,16 +12,17 @@ import TaskForm from "./components/TaskForm.jsx";
 export default function App() {
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [completed, setCompleted] = useState([]);
   const [stats, setStats] = useState(null);
   const [couple, setCouple] = useState(null);
   const [activeUser, setActiveUser] = useState(1);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [view, setView] = useState("shared");
   const [activeTab, setActiveTab] = useState("home");
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
   const coupleId = couple?.id || 1;
+  const stardust = stats?.stardust || 0;
 
   async function loadCouple(userId) {
     try {
@@ -43,21 +44,20 @@ export default function App() {
       const coupleData = await loadCouple(activeUser);
       if (!coupleData) {
         setTasks([]);
+        setCompleted([]);
         setStats(null);
         setError("");
         return;
       }
 
-      const query = new URLSearchParams({
-        couple_id: String(coupleData.id),
-        user_id: String(activeUser),
-        view,
-      });
-      const [taskData, statData] = await Promise.all([
-        request(`/tasks?${query.toString()}`),
-        request(`/stats?couple_id=${coupleData.id}`),
+      const cid = coupleData.id;
+      const [taskData, doneData, statData] = await Promise.all([
+        request(`/tasks?couple_id=${cid}&user_id=${activeUser}&view=all`),
+        request(`/tasks/completed?couple_id=${cid}&user_id=${activeUser}&view=all`),
+        request(`/stats?couple_id=${cid}`),
       ]);
       setTasks(taskData);
+      setCompleted(doneData);
       setStats(statData);
       setError("");
     } catch (err) {
@@ -70,13 +70,12 @@ export default function App() {
     setUsers(userData);
   }
 
-  useEffect(() => { load(); }, [activeUser, view, refreshTick]);
+  useEffect(() => { load(); }, [activeUser, refreshTick]);
 
   const activeName = useMemo(
     () => users.find((user) => user.id === Number(activeUser))?.username || "Sync",
     [users, activeUser]
   );
-  const stardust = tasks.filter((task) => task.is_completed).length * 12;
 
   function refresh() {
     setRefreshTick((tick) => tick + 1);
@@ -89,8 +88,6 @@ export default function App() {
 
   function handleTabChange(nextTab) {
     setActiveTab(nextTab);
-    if (nextTab === "home") setView("shared");
-    if (nextTab === "tasks") setView("mine");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -114,8 +111,11 @@ export default function App() {
       {activeTab === "home" && (
         <BubbleGarden
           tasks={tasks}
+          completed={completed}
           stats={stats}
+          stardust={stardust}
           activeName={activeName}
+          activeUser={activeUser}
           onRefresh={refresh}
           onAddTask={() => setActiveTab("tasks")}
           onConnect={() => setActiveTab("partner")}
@@ -124,7 +124,7 @@ export default function App() {
       )}
 
       {activeTab === "partner" && (
-        <CoupleConnect users={users} activeUser={activeUser} couple={couple} onConnected={handleConnected} />
+        <CoupleConnect users={users} activeUser={activeUser} couple={couple} stats={stats} onConnected={handleConnected} />
       )}
 
       {activeTab === "tasks" && (
@@ -132,7 +132,7 @@ export default function App() {
           <div className="growth-intro">
             <span className="garden-kicker">Growth Bubbles</span>
             <h2>照顧新的泡泡</h2>
-            <p>新增一件你們要一起面對的事。前台保持簡單，細節留在點開泡泡後再看。</p>
+            <p>新增一件你們要一起面對的事。到期時間請設未來，戳破後才會依到期資格給星塵。</p>
           </div>
           {!couple && (
             <div className="connect-inline">
@@ -142,7 +142,7 @@ export default function App() {
           )}
           {couple && <TaskForm users={users} activeUser={activeUser} coupleId={coupleId} onCreated={refresh} />}
           {error && <div className="error">{error}</div>}
-          <TaskBoard tasks={tasks} />
+          <TaskBoard tasks={tasks} activeUser={activeUser} onRefresh={refresh} />
         </section>
       )}
 
@@ -152,12 +152,12 @@ export default function App() {
         <section className="profile-page panel">
           <span className="garden-kicker">Profile</span>
           <h2>我的小星球</h2>
-          <p>{activeName} 目前照顧了 {stats?.total || 0} 顆泡泡，累積 {stardust} 星塵。</p>
+          <p>{activeName} 目前照顧了 {stats?.total || 0} 顆泡泡，完成 {stats?.completed || 0} 顆，累積 {stardust} 星塵。</p>
           <button className="btn" onClick={() => setIsAuthenticated(false)}>登出</button>
         </section>
       )}
 
-      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} pendingConfirm={stats?.pending_confirm || 0} />
     </main>
   );
 }
