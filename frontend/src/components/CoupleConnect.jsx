@@ -1,8 +1,18 @@
 import { Copy, HeartHandshake, Link2, Mail, QrCode, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { request } from "../api/client.js";
+import CompletedPage from "./CompletedPage.jsx";
 
-export default function CoupleConnect({ users, activeUser, couple, stats, onConnected }) {
+export default function CoupleConnect({
+  users,
+  activeUser,
+  couple,
+  stats,
+  completed = [],
+  stardust = 0,
+  onRefresh,
+  onConnected,
+}) {
   const [selectedPartner, setSelectedPartner] = useState("");
   const [method, setMethod] = useState("direct");
   const [error, setError] = useState("");
@@ -24,10 +34,9 @@ export default function CoupleConnect({ users, activeUser, couple, stats, onConn
     ? Math.max(1, Math.floor((Date.now() - new Date(couple.created_at).getTime()) / 86400000) + 1)
     : 0;
   const total = stats?.total || 0;
-  const completed = stats?.completed || 0;
-  const shared = stats?.shared || 0;
+  const completedCount = stats?.completed || 0;
+  const pendingConfirm = stats?.pending_confirm || 0;
   const completionRate = stats?.completion_rate || 0;
-  const stardust = completed * 12;
 
   async function connectPartner(event) {
     event.preventDefault();
@@ -58,74 +67,76 @@ export default function CoupleConnect({ users, activeUser, couple, stats, onConn
     <section className="connect-page">
       <div className="connect-hero">
         <span className="garden-kicker">Partner Link</span>
-        <h2>你想和誰連成共享星域？</h2>
-        <p>先決定要把泡泡共享給誰。前台只讓你看見彼此的方向，後端會記錄這是共享世界還是私人軌道。</p>
+        <h2>你想和誰共享這個小宇宙？</h2>
+        <p>這裡只處理一件事：把兩個人的生活連起來。其他說明不要堆在畫面上，真的要用時再出現。</p>
       </div>
 
       {couple ? (
-        <article className="connect-card linked">
-          <div className="connect-orbit">
-            <span>{activeUserData?.username?.slice(0, 1) || "你"}</span>
-            <i></i>
-            <span>{partnerName?.slice(0, 1) || "他"}</span>
-          </div>
-          <div>
-            <h3>已和 {partnerName} 綁定</h3>
-            <p>你們的共享泡泡會出現在同一個星域；私人泡泡仍留在自己的軌道裡。</p>
-          </div>
-        </article>
-      ) : null}
+        <>
+          <article className="connect-card linked">
+            <div className="connect-orbit">
+              <span>{activeUserData?.username?.slice(0, 1) || "你"}</span>
+              <i></i>
+              <span>{partnerName?.slice(0, 1) || "他"}</span>
+            </div>
+            <div>
+              <h3>你和 {partnerName} 已連線</h3>
+              <p>共享泡泡會進同一個星域；私人泡泡留在自己的軌道，不用每一點壓力都攤開。</p>
+            </div>
+          </article>
 
-      {couple && (
-        <div className="relationship-board">
-          <div className="relationship-headline">
-            <span className="garden-kicker">Our Journey</span>
-            <h3>你和 {partnerName} 一起累積的足跡</h3>
-            <p>這些是你們在 Sync-Us 上真實照顧彼此生活的紀錄。</p>
+          <div className="relationship-board">
+            <div className="relationship-headline">
+              <span className="garden-kicker">Our Trail</span>
+              <h3>你們一起留下的足跡</h3>
+              <p>這裡放已完成、待確認和星塵紀錄。它不是成績單，是你們真的有在互相接住的證據。</p>
+            </div>
+
+            <div className="relationship-hero">
+              <strong>{daysTogether}</strong>
+              <span>天一起照顧這個星域</span>
+            </div>
+
+            <div className="relationship-grid">
+              <div className="relationship-stat">
+                <strong>{total}</strong>
+                <span>一起面對的事</span>
+              </div>
+              <div className="relationship-stat">
+                <strong>{completedCount}</strong>
+                <span>已戳破的泡泡</span>
+              </div>
+              <div className="relationship-stat">
+                <strong>{pendingConfirm}</strong>
+                <span>等對方確認</span>
+              </div>
+              <div className="relationship-stat">
+                <strong>{stardust}</strong>
+                <span>累積星塵</span>
+              </div>
+            </div>
+
+            <div className="relationship-progress">
+              <div className="relationship-progress-head">
+                <span>一起完成的比例</span>
+                <strong>{completionRate}%</strong>
+              </div>
+              <div className="relationship-bar">
+                <div className="relationship-bar-fill" style={{ width: `${Math.min(100, completionRate)}%` }}></div>
+              </div>
+            </div>
           </div>
 
-          <div className="relationship-hero">
-            <strong>{daysTogether}</strong>
-            <span>天 一起照顧這個星域</span>
-          </div>
-
-          <div className="relationship-grid">
-            <div className="relationship-stat">
-              <strong>{total}</strong>
-              <span>一起面對的事</span>
-            </div>
-            <div className="relationship-stat">
-              <strong>{completed}</strong>
-              <span>已完成的泡泡</span>
-            </div>
-            <div className="relationship-stat">
-              <strong>{shared}</strong>
-              <span>共享星域裡的事</span>
-            </div>
-            <div className="relationship-stat">
-              <strong>{stardust}</strong>
-              <span>累積星塵</span>
-            </div>
-          </div>
-
-          <div className="relationship-progress">
-            <div className="relationship-progress-head">
-              <span>一起完成的比例</span>
-              <strong>{completionRate}%</strong>
-            </div>
-            <div className="relationship-bar">
-              <div className="relationship-bar-fill" style={{ width: `${Math.min(100, completionRate)}%` }}></div>
-            </div>
-            <p className="relationship-note">
-              {completed === 0
-                ? "還沒有一起完成的泡泡，去戳破第一顆吧。"
-                : `你們已經一起完成 ${completed} 件事，每一件都是彼此記得對方的證明。`}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!couple && (
+          <CompletedPage
+            completed={completed}
+            activeUser={activeUser}
+            stardust={stardust}
+            stats={stats}
+            onRefresh={onRefresh}
+            embedded
+          />
+        </>
+      ) : (
         <form className="connect-card" onSubmit={connectPartner}>
           <div className="connect-methods" role="tablist" aria-label="連結方式">
             <button type="button" className={method === "direct" ? "active" : ""} onClick={() => setMethod("direct")}>
@@ -170,7 +181,7 @@ export default function CoupleConnect({ users, activeUser, couple, stats, onConn
               <Sparkles size={20} />
               <div>
                 <strong>配對碼</strong>
-                <p>適合 App Store 版本：一方產生配對碼，另一方輸入後建立共享星域。</p>
+                <p>適合手機正式版：一方產生配對碼，另一方輸入後建立共享星域。</p>
               </div>
             </div>
           )}
@@ -182,17 +193,6 @@ export default function CoupleConnect({ users, activeUser, couple, stats, onConn
           </button>
         </form>
       )}
-
-      <div className="connect-notes">
-        <article>
-          <h3>共享世界</h3>
-          <p>兩個人都看得到，適合約會、家務、旅行、出國前準備。</p>
-        </article>
-        <article>
-          <h3>私人軌道</h3>
-          <p>只記錄在自己的空間，不把所有壓力都攤在對方面前。</p>
-        </article>
-      </div>
     </section>
   );
 }

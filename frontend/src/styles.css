@@ -1302,21 +1302,24 @@ button { cursor: pointer; border: 0; }
 }
 
 /* ===== Completed page ===== */
-.done-page { padding-top: 4px; }
+.done-page {
+  display: grid;
+  gap: 12px;
+  padding-top: 2px;
+}
 
 .done-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin: 4px 0 16px;
+  gap: 8px;
 }
 
 .done-summary div {
   text-align: center;
-  padding: 14px 8px;
+  padding: 12px 8px;
   border-radius: 18px;
-  background: rgba(255,255,255,0.7);
-  border: 1px solid rgba(36,48,51,0.07);
+  background: rgba(255,255,255,0.56);
+  border: 1px solid rgba(36,48,51,0.06);
 }
 
 .done-summary strong { display: block; font-size: 26px; color: #253235; }
@@ -1324,8 +1327,7 @@ button { cursor: pointer; border: 0; }
 
 .done-filters {
   display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 8px;
 }
 
 .filter-row { display: flex; align-items: center; gap: 10px; }
@@ -1353,9 +1355,9 @@ button { cursor: pointer; border: 0; }
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255,255,255,0.62);
-  border: 1px solid rgba(36,48,51,0.07);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.54);
+  border: 1px solid rgba(36,48,51,0.06);
 }
 
 .done-item-main { min-width: 0; }
@@ -1645,14 +1647,12 @@ button { cursor: pointer; border: 0; }
   align-items: center;
 }
 
-.connect-card h3,
-.connect-notes h3 {
+.connect-card h3 {
   margin: 0 0 8px;
   font-size: 22px;
 }
 
-.connect-card p,
-.connect-notes p {
+.connect-card p {
   margin: 0;
   color: var(--muted);
   line-height: 1.65;
@@ -1781,13 +1781,6 @@ button { cursor: pointer; border: 0; }
   cursor: not-allowed;
 }
 
-.connect-notes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.connect-notes article,
 .connect-inline {
   padding: 16px;
   border-radius: 22px;
@@ -2115,10 +2108,6 @@ button { cursor: pointer; border: 0; }
 
   .connect-methods button {
     min-height: 46px;
-  }
-
-  .connect-notes {
-    grid-template-columns: 1fr;
   }
 
   .connect-inline {

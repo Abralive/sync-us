@@ -111,7 +111,6 @@ export default function App() {
       {activeTab === "home" && (
         <BubbleGarden
           tasks={tasks}
-          completed={completed}
           stats={stats}
           stardust={stardust}
           activeName={activeName}
@@ -124,7 +123,16 @@ export default function App() {
       )}
 
       {activeTab === "partner" && (
-        <CoupleConnect users={users} activeUser={activeUser} couple={couple} stats={stats} onConnected={handleConnected} />
+        <CoupleConnect
+          users={users}
+          activeUser={activeUser}
+          couple={couple}
+          stats={stats}
+          completed={completed}
+          stardust={stardust}
+          onRefresh={refresh}
+          onConnected={handleConnected}
+        />
       )}
 
       {activeTab === "tasks" && (
@@ -132,7 +140,7 @@ export default function App() {
           <div className="growth-intro">
             <span className="garden-kicker">Growth Bubbles</span>
             <h2>照顧新的泡泡</h2>
-            <p>新增一件你們要一起面對的事。到期時間請設未來，戳破後才會依到期資格給星塵。</p>
+            <p>新增一件你們要一起面對的事。畫面只保留必要資訊，細節等點開泡泡再看。</p>
           </div>
           {!couple && (
             <div className="connect-inline">
