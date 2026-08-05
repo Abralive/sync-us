@@ -36,12 +36,11 @@ export default function CoupleConnect({
   const total = stats?.total || 0;
   const completedCount = stats?.completed || 0;
   const pendingConfirm = stats?.pending_confirm || 0;
-  const completionRate = stats?.completion_rate || 0;
 
   async function connectPartner(event) {
     event.preventDefault();
     if (!selectedPartner) {
-      setError("先選一個要一起生活的人，不然星域會很孤單。");
+      setError("先選一個人，才能建立共享星域。");
       return;
     }
 
@@ -66,9 +65,9 @@ export default function CoupleConnect({
   return (
     <section className="connect-page">
       <div className="connect-hero">
-        <span className="garden-kicker">Partner Link</span>
-        <h2>你想和誰共享這個小宇宙？</h2>
-        <p>這裡只處理一件事：把兩個人的生活連起來。其他說明不要堆在畫面上，真的要用時再出現。</p>
+        <span className="garden-kicker">連結</span>
+        <h2>把兩個人的生活接起來</h2>
+        <p>不用每件事都攤開，但重要的事要有人看見。</p>
       </div>
 
       {couple ? (
@@ -81,48 +80,32 @@ export default function CoupleConnect({
             </div>
             <div>
               <h3>你和 {partnerName} 已連線</h3>
-              <p>共享泡泡會進同一個星域；私人泡泡留在自己的軌道，不用每一點壓力都攤開。</p>
+              <p>共享泡泡放一起，私人泡泡留在自己的小軌道。</p>
             </div>
           </article>
 
-          <div className="relationship-board">
+          <div className="relationship-board quiet">
             <div className="relationship-headline">
-              <span className="garden-kicker">Our Trail</span>
-              <h3>你們一起留下的足跡</h3>
-              <p>這裡放已完成、待確認和星塵紀錄。它不是成績單，是你們真的有在互相接住的證據。</p>
+              <span className="garden-kicker">足跡</span>
+              <h3>最近一起接住的事</h3>
             </div>
 
-            <div className="relationship-hero">
-              <strong>{daysTogether}</strong>
-              <span>天一起照顧這個星域</span>
-            </div>
-
-            <div className="relationship-grid">
+            <div className="relationship-grid compact">
+              <div className="relationship-stat">
+                <strong>{daysTogether}</strong>
+                <span>連線天數</span>
+              </div>
               <div className="relationship-stat">
                 <strong>{total}</strong>
-                <span>一起面對的事</span>
+                <span>照顧中的事</span>
               </div>
               <div className="relationship-stat">
                 <strong>{completedCount}</strong>
-                <span>已戳破的泡泡</span>
+                <span>已完成</span>
               </div>
               <div className="relationship-stat">
                 <strong>{pendingConfirm}</strong>
-                <span>等對方確認</span>
-              </div>
-              <div className="relationship-stat">
-                <strong>{stardust}</strong>
-                <span>累積星塵</span>
-              </div>
-            </div>
-
-            <div className="relationship-progress">
-              <div className="relationship-progress-head">
-                <span>一起完成的比例</span>
-                <strong>{completionRate}%</strong>
-              </div>
-              <div className="relationship-bar">
-                <div className="relationship-bar-fill" style={{ width: `${Math.min(100, completionRate)}%` }}></div>
+                <span>待確認</span>
               </div>
             </div>
           </div>
@@ -155,7 +138,7 @@ export default function CoupleConnect({
 
           {method === "direct" && (
             <label className="connect-field">
-              選擇要共享給誰
+              選擇對象
               <select value={selectedPartner} onChange={(event) => setSelectedPartner(event.target.value)}>
                 <option value="">選一個人</option>
                 {partnerOptions.map((user) => (
@@ -170,7 +153,7 @@ export default function CoupleConnect({
               <Mail size={20} />
               <div>
                 <strong>邀請連結</strong>
-                <p>下一版會產生可分享連結。現在先用「直接選擇」完成本機配對。</p>
+                <p>下一版會支援直接分享連結。現在先用本機帳號配對。</p>
               </div>
               <button type="button" className="icon-pill" disabled><Copy size={17} /></button>
             </div>
@@ -181,7 +164,7 @@ export default function CoupleConnect({
               <Sparkles size={20} />
               <div>
                 <strong>配對碼</strong>
-                <p>適合手機正式版：一方產生配對碼，另一方輸入後建立共享星域。</p>
+                <p>適合手機正式版，一方產生配對碼，另一方輸入後連線。</p>
               </div>
             </div>
           )}

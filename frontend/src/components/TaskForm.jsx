@@ -26,11 +26,11 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
     event.preventDefault();
     setError("");
     if (!form.title.trim() || !form.due_time) {
-      setError("請填寫標題與到期時間。");
+      setError("請填寫事情名稱和時間。");
       return;
     }
     if (new Date(form.due_time).getTime() <= Date.now()) {
-      setError("到期時間必須是未來時間（避免回填刷星塵）。");
+      setError("時間要設定在未來，才不會變成回填星塵。");
       return;
     }
     setSubmitting(true);
@@ -62,7 +62,7 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
   return (
     <form onSubmit={submit} className="growth-form">
       <label>
-        這顆泡泡要照顧什麼？
+        要照顧什麼？
         <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="例：訂週末晚餐" />
       </label>
       <label>
@@ -70,7 +70,7 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
         <input type="datetime-local" min={localMinNow()} value={form.due_time} onChange={(event) => setForm({ ...form, due_time: event.target.value })} />
       </label>
       <label>
-        補充一句話
+        備註
         <input value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="例：不要再到當天才想起來" />
       </label>
       <div className="growth-row">
@@ -88,10 +88,10 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
       </div>
       <label className="quiet-toggle">
         <input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />
-        這是自己的小軌道
+        放在私人軌道
       </label>
       {error && <div className="error">{error}</div>}
-      <button className="btn primary" disabled={submitting}>{submitting ? "長泡泡中..." : "長出一顆泡泡"}</button>
+      <button className="btn primary" disabled={submitting}>{submitting ? "新增中..." : "長出一顆泡泡"}</button>
     </form>
   );
 }

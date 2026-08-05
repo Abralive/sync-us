@@ -4,7 +4,6 @@ import { countdownText, formatDateTime } from "../utils/date.js";
 
 export default function BubbleGarden({
   tasks,
-  stats,
   stardust,
   activeName,
   activeUser,
@@ -29,7 +28,7 @@ export default function BubbleGarden({
     <section className="garden-screen">
       <div className="garden-header compact">
         <div>
-          <span className="garden-kicker">Bubble Habitat</span>
+          <span className="garden-kicker">今天的星域</span>
           <h2>泡泡星域</h2>
         </div>
         <button className="btn primary" onClick={hasCouple ? onAddTask : onConnect}>
@@ -38,7 +37,7 @@ export default function BubbleGarden({
       </div>
 
       <div className="garden-stats">
-        <div><span>目前星球</span><strong>{activeName}</strong></div>
+        <div><span>目前使用者</span><strong>{activeName}</strong></div>
         <div><span>照顧中</span><strong>{tasks.length}</strong></div>
         <div><span>星塵</span><strong>{stardust}</strong></div>
       </div>
@@ -63,7 +62,7 @@ export default function BubbleGarden({
         <div className="bubble-field">
           <div className="field-empty">
             <strong>還沒有共享星域</strong>
-            <p>先選一個想一起照顧生活的人，泡泡才知道要飄去哪裡。</p>
+            <p>先選一個想一起照顧生活的人。</p>
             <button className="btn primary" onClick={onConnect}>建立連結</button>
           </div>
         </div>
@@ -72,7 +71,7 @@ export default function BubbleGarden({
           <div className="bubble-field">
             {list.length === 0 ? (
               <div className="field-empty">
-                <p>{segment === "private" ? "私人軌道目前很安靜，只有你看得到。" : "還沒有共享泡泡，先長出第一顆吧。"}</p>
+                <p>{segment === "private" ? "私人軌道目前很安靜。" : "還沒有共享泡泡，先長出第一顆吧。"}</p>
                 <button className="btn primary" onClick={onAddTask}>新增泡泡</button>
               </div>
             ) : (
@@ -90,7 +89,7 @@ export default function BubbleGarden({
             )}
           </div>
           {list.length > 0 && (
-            <p className="garden-tip">輕點看細節，長按戳破完成。完成紀錄放在連結頁，這裡只照顧還活著的泡泡。</p>
+            <p className="garden-tip">輕點看細節，長按戳破完成。完成紀錄放在連結頁。</p>
           )}
         </>
       )}

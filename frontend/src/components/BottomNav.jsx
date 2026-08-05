@@ -15,7 +15,7 @@ export default function BottomNav({ activeTab, onTabChange, pendingConfirm = 0 }
         <button key={key} className={activeTab === key ? "active" : ""} onClick={() => onTabChange(key)}>
           <span className="nav-icon-wrap">
             <Icon size={20} strokeWidth={2.2} />
-            {key === "home" && pendingConfirm > 0 && <span className="nav-badge">{pendingConfirm}</span>}
+            {key === "partner" && pendingConfirm > 0 && <span className="nav-badge">{pendingConfirm}</span>}
           </span>
           <span>{label}</span>
         </button>

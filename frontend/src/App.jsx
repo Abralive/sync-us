@@ -111,7 +111,6 @@ export default function App() {
       {activeTab === "home" && (
         <BubbleGarden
           tasks={tasks}
-          stats={stats}
           stardust={stardust}
           activeName={activeName}
           activeUser={activeUser}
@@ -138,9 +137,9 @@ export default function App() {
       {activeTab === "tasks" && (
         <section className="growth-page">
           <div className="growth-intro">
-            <span className="garden-kicker">Growth Bubbles</span>
-            <h2>照顧新的泡泡</h2>
-            <p>新增一件你們要一起面對的事。畫面只保留必要資訊，細節等點開泡泡再看。</p>
+            <span className="garden-kicker">泡泡管理</span>
+            <h2>安排要一起面對的事</h2>
+            <p>清單適合快速處理，日曆適合看時間分布。星域只留下需要被照顧的泡泡。</p>
           </div>
           {!couple && (
             <div className="connect-inline">
@@ -158,7 +157,7 @@ export default function App() {
 
       {activeTab === "profile" && (
         <section className="profile-page panel">
-          <span className="garden-kicker">Profile</span>
+          <span className="garden-kicker">我的</span>
           <h2>我的小星球</h2>
           <p>{activeName} 目前照顧了 {stats?.total || 0} 顆泡泡，完成 {stats?.completed || 0} 顆，累積 {stardust} 星塵。</p>
           <button className="btn" onClick={() => setIsAuthenticated(false)}>登出</button>
