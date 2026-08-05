@@ -9,6 +9,8 @@ import ShopPage from "./components/ShopPage.jsx";
 import TaskBoard from "./components/TaskBoard.jsx";
 import TaskForm from "./components/TaskForm.jsx";
 
+const REVIEW_MODE = new URLSearchParams(window.location.search).get("review") === "1";
+
 export default function App() {
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -16,7 +18,7 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [couple, setCouple] = useState(null);
   const [activeUser, setActiveUser] = useState(1);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(REVIEW_MODE);
   const [activeTab, setActiveTab] = useState("home");
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
@@ -70,7 +72,9 @@ export default function App() {
     setUsers(userData);
   }
 
-  useEffect(() => { load(); }, [activeUser, refreshTick]);
+  useEffect(() => {
+    load();
+  }, [activeUser, refreshTick]);
 
   const activeName = useMemo(
     () => users.find((user) => user.id === Number(activeUser))?.username || "Sync",
@@ -91,6 +95,10 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function logout() {
+    setIsAuthenticated(false);
+  }
+
   if (!isAuthenticated) {
     return (
       <AuthScreen
@@ -106,7 +114,7 @@ export default function App() {
 
   return (
     <main className="app-shell game-shell">
-      <Header users={users} activeUser={activeUser} onActiveUserChange={setActiveUser} onLogout={() => setIsAuthenticated(false)} />
+      <Header users={users} activeUser={activeUser} onActiveUserChange={setActiveUser} onLogout={logout} />
 
       {activeTab === "home" && (
         <BubbleGarden
@@ -160,7 +168,7 @@ export default function App() {
           <span className="garden-kicker">我的</span>
           <h2>我的小星球</h2>
           <p>{activeName} 目前照顧了 {stats?.total || 0} 顆泡泡，完成 {stats?.completed || 0} 顆，累積 {stardust} 星塵。</p>
-          <button className="btn" onClick={() => setIsAuthenticated(false)}>登出</button>
+          <button className="btn" onClick={logout}>登出</button>
         </section>
       )}
 
