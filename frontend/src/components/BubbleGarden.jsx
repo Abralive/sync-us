@@ -12,6 +12,8 @@ export default function BubbleGarden({
   onAddTask,
   onConnect,
   hasCouple,
+  visualStyle,
+  onVisualStyleChange,
 }) {
   const [segment, setSegment] = useState("shared");
   const [selectedTask, setSelectedTask] = useState(null);
@@ -24,12 +26,31 @@ export default function BubbleGarden({
     { key: "shared", label: "共享", count: shared.length },
     { key: "private", label: "私人", count: privates.length },
   ];
+  const styleOptions = [
+    { key: "fresh", label: "清新" },
+    { key: "playful", label: "活潑" },
+    { key: "tech", label: "科技" },
+  ];
 
   return (
     <section className="garden-screen notebook-home">
       <div className="notebook-hero">
         <div className="notebook-copy">
-          <span className="garden-kicker">Daily bubble note</span>
+          <div className="hero-meta-row">
+            <span className="garden-kicker">Daily bubble note</span>
+            <div className="style-switcher" aria-label="主視覺版本">
+              {styleOptions.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={visualStyle === item.key ? "active" : ""}
+                  onClick={() => onVisualStyleChange(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <h2>今天先照顧哪幾顆？</h2>
           <p>把壓力放進泡泡裡。你們不用猜誰比較累，只要一起看見今天正在被照顧的事。</p>
 

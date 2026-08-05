@@ -3804,3 +3804,392 @@ body {
     bottom: 9px;
   }
 }
+
+/* ===== Visual direction variants for homepage comparison ===== */
+.hero-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.hero-meta-row .garden-kicker {
+  margin-bottom: 0;
+}
+
+.style-switcher {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(36, 49, 50, 0.1);
+}
+
+.style-switcher button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(36, 49, 50, 0.56);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.style-switcher button.active {
+  background: #243132;
+  color: #fff;
+}
+
+.theme-fresh,
+.theme-playful,
+.theme-tech {
+  --display-face: "Microsoft JhengHei UI", "Noto Sans TC", "PingFang TC", "Segoe UI", sans-serif;
+}
+
+.theme-fresh .notebook-copy h2,
+.theme-playful .notebook-copy h2,
+.theme-tech .notebook-copy h2 {
+  font-family: var(--display-face);
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.theme-fresh .couple-note,
+.theme-playful .couple-note,
+.theme-tech .couple-note {
+  background: transparent;
+}
+
+.theme-fresh .care-mascot,
+.theme-playful .care-mascot,
+.theme-tech .care-mascot {
+  width: 166px;
+  height: 118px;
+}
+
+.theme-fresh .mascot-face,
+.theme-playful .mascot-face,
+.theme-tech .mascot-face {
+  width: 76px;
+  height: 76px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  box-shadow:
+    inset 10px 12px 18px rgba(255, 255, 255, 0.62),
+    inset -13px -15px 24px rgba(64, 128, 140, 0.14),
+    0 14px 24px rgba(46, 74, 82, 0.1);
+}
+
+.theme-fresh .mascot-face::before,
+.theme-fresh .mascot-face::after,
+.theme-playful .mascot-face::before,
+.theme-playful .mascot-face::after,
+.theme-tech .mascot-face::before,
+.theme-tech .mascot-face::after {
+  top: 32px;
+  width: 5px;
+  height: 5px;
+  background: rgba(35, 49, 50, 0.72);
+}
+
+.theme-fresh .mascot-face::before,
+.theme-playful .mascot-face::before,
+.theme-tech .mascot-face::before {
+  box-shadow: none;
+}
+
+.theme-fresh .mascot-bubble,
+.theme-playful .mascot-bubble,
+.theme-tech .mascot-bubble {
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.44);
+  box-shadow: inset 5px 6px 10px rgba(255, 255, 255, 0.7);
+}
+
+.theme-fresh .mascot-face.one {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(205, 246, 245, 0.82), rgba(126, 201, 198, 0.46));
+}
+
+.theme-fresh .mascot-face.two {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(255, 233, 237, 0.9), rgba(255, 168, 185, 0.46));
+}
+
+.theme-playful .mascot-face.one {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(199, 238, 255, 0.88), rgba(107, 191, 230, 0.48));
+}
+
+.theme-playful .mascot-face.two {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(255, 241, 187, 0.92), rgba(255, 142, 166, 0.5));
+}
+
+.theme-tech .mascot-face.one {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(198, 255, 242, 0.92), rgba(49, 198, 190, 0.44));
+}
+
+.theme-tech .mascot-face.two {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.98), transparent 24%),
+    linear-gradient(150deg, rgba(231, 226, 255, 0.92), rgba(126, 113, 255, 0.42));
+}
+
+.theme-fresh .bubble-ring,
+.theme-playful .bubble-ring,
+.theme-tech .bubble-ring {
+  border-width: 1px;
+  border-color: rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 12px 14px 20px rgba(255, 255, 255, 0.58),
+    inset -18px -20px 30px rgba(92, 160, 172, 0.14),
+    0 18px 30px rgba(44, 74, 82, 0.08);
+}
+
+.theme-fresh .bubble-glass,
+.theme-playful .bubble-glass,
+.theme-tech .bubble-glass {
+  border-radius: 50%;
+  backdrop-filter: blur(5px);
+}
+
+.theme-fresh .bubble-sheen,
+.theme-playful .bubble-sheen,
+.theme-tech .bubble-sheen {
+  border: 0;
+  width: 26%;
+  height: 18%;
+  background: rgba(255, 255, 255, 0.68);
+  filter: blur(2px);
+}
+
+body[data-visual-style="fresh"] {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(181, 238, 235, 0.34), transparent 24%),
+    radial-gradient(circle at 86% 18%, rgba(255, 205, 215, 0.32), transparent 22%),
+    linear-gradient(180deg, #fbfffc 0%, #f2fbf8 46%, #edf6f2 100%);
+}
+
+.theme-fresh {
+  --notebook-ink: #233b3b;
+  --notebook-yellow: #f4c95d;
+}
+
+.theme-fresh .notebook-hero {
+  border-bottom-color: rgba(75, 122, 119, 0.12);
+}
+
+.theme-fresh .notebook-copy .garden-kicker,
+.theme-fresh .workspace-label,
+.theme-fresh .garden-tip {
+  font-family: "Microsoft JhengHei UI", "Noto Sans TC", "PingFang TC", sans-serif;
+}
+
+.theme-fresh .notebook-copy h2 {
+  color: #233b3b;
+}
+
+.theme-fresh .couple-note {
+  border-color: rgba(64, 128, 128, 0.14);
+  border-radius: 30px;
+  box-shadow: 0 18px 42px rgba(64, 128, 128, 0.08);
+}
+
+.theme-fresh .couple-note::before {
+  background: rgba(144, 221, 210, 0.44);
+}
+
+.theme-fresh .add-bubble-btn,
+.theme-fresh .seg.active,
+.theme-fresh .bottom-nav button.active,
+.theme-fresh .style-switcher button.active {
+  background: #23464a;
+}
+
+.theme-fresh .bubble-field {
+  background:
+    radial-gradient(ellipse at 55% 56%, transparent 0 34%, rgba(90, 150, 150, 0.12) 34.2% 34.4%, transparent 34.7%),
+    radial-gradient(ellipse at 55% 56%, transparent 0 51%, rgba(90, 150, 150, 0.1) 51.2% 51.4%, transparent 51.7%),
+    linear-gradient(90deg, rgba(101, 171, 164, 0.05) 1px, transparent 1px) 0 0 / 28px 28px;
+}
+
+body[data-visual-style="playful"] {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(112, 205, 238, 0.24), transparent 22%),
+    radial-gradient(circle at 82% 16%, rgba(255, 166, 117, 0.26), transparent 24%),
+    linear-gradient(180deg, #fffdf6 0%, #fff5e7 42%, #fff1ee 100%);
+}
+
+.theme-playful {
+  --notebook-ink: #2d3541;
+  --notebook-yellow: #ffd65e;
+}
+
+.theme-playful .notebook-copy .garden-kicker,
+.theme-playful .workspace-label,
+.theme-playful .garden-tip {
+  font-family: "Comic Sans MS", "Segoe Print", "Microsoft JhengHei UI", "Noto Sans TC", sans-serif;
+}
+
+.theme-playful .notebook-copy h2 {
+  color: #2d3541;
+}
+
+.theme-playful .notebook-copy h2::after {
+  content: "";
+  display: block;
+  width: 150px;
+  height: 12px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #73cdec, #ffd65e, #ff91a9);
+}
+
+.theme-playful .couple-note {
+  border-color: rgba(45, 53, 65, 0.12);
+  border-radius: 34px 26px 36px 28px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.theme-playful .couple-note::before {
+  background: rgba(255, 214, 94, 0.66);
+}
+
+.theme-playful .add-bubble-btn,
+.theme-playful .seg.active,
+.theme-playful .bottom-nav button.active,
+.theme-playful .style-switcher button.active {
+  background: #314258;
+}
+
+.theme-playful .bubble-field {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(115, 205, 236, 0.16), transparent 16%),
+    radial-gradient(circle at 84% 24%, rgba(255, 145, 169, 0.16), transparent 16%),
+    radial-gradient(ellipse at 52% 58%, transparent 0 36%, rgba(49, 66, 88, 0.12) 36.2% 36.5%, transparent 36.8%),
+    radial-gradient(ellipse at 52% 58%, transparent 0 58%, rgba(49, 66, 88, 0.1) 58.2% 58.5%, transparent 58.8%),
+    linear-gradient(90deg, rgba(49, 66, 88, 0.04) 1px, transparent 1px) 0 0 / 26px 26px;
+}
+
+.theme-playful .bubble-field .garden-bubble-orb:nth-of-type(1) {
+  top: 4%;
+}
+
+.theme-playful .task-bubble-core {
+  background: #ffd65e;
+}
+
+body[data-visual-style="tech"] {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(30, 213, 199, 0.2), transparent 22%),
+    radial-gradient(circle at 78% 12%, rgba(120, 116, 255, 0.16), transparent 24%),
+    linear-gradient(180deg, #f8fffd 0%, #eef8ff 42%, #edf3ff 100%);
+}
+
+.theme-tech {
+  --notebook-ink: #172d3d;
+  --notebook-yellow: #8cf0d5;
+}
+
+.theme-tech .notebook-copy .garden-kicker,
+.theme-tech .workspace-label,
+.theme-tech .garden-tip {
+  font-family: "Segoe UI", "Microsoft JhengHei UI", "Noto Sans TC", sans-serif;
+}
+
+.theme-tech .notebook-copy h2 {
+  color: #172d3d;
+  font-weight: 800;
+}
+
+.theme-tech .couple-note {
+  border-color: rgba(23, 45, 61, 0.1);
+  border-radius: 32px;
+  background:
+    linear-gradient(90deg, rgba(23, 45, 61, 0.045) 1px, transparent 1px) 0 0 / 18px 18px,
+    rgba(255, 255, 255, 0.34);
+}
+
+.theme-tech .couple-note::before {
+  background: rgba(140, 240, 213, 0.55);
+}
+
+.theme-tech .add-bubble-btn,
+.theme-tech .seg.active,
+.theme-tech .bottom-nav button.active,
+.theme-tech .style-switcher button.active {
+  background: #173246;
+}
+
+.theme-tech .bubble-field {
+  background:
+    radial-gradient(ellipse at 54% 56%, transparent 0 35%, rgba(34, 150, 178, 0.14) 35.1% 35.3%, transparent 35.6%),
+    radial-gradient(ellipse at 54% 56%, transparent 0 55%, rgba(93, 108, 255, 0.12) 55.1% 55.3%, transparent 55.6%),
+    linear-gradient(90deg, rgba(23, 45, 61, 0.045) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(180deg, rgba(23, 45, 61, 0.035) 1px, transparent 1px) 0 0 / 22px 22px;
+}
+
+.theme-tech .bubble-ring {
+  box-shadow:
+    inset 12px 14px 20px rgba(255, 255, 255, 0.62),
+    inset -18px -20px 30px rgba(30, 213, 199, 0.14),
+    0 18px 30px rgba(23, 45, 61, 0.08);
+}
+
+.theme-tech .task-bubble-core {
+  background: #8cf0d5;
+}
+
+@media (max-width: 760px) {
+  .hero-meta-row {
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .style-switcher {
+    width: auto;
+    justify-content: space-between;
+  }
+
+  .style-switcher button {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding-inline: 9px;
+  }
+
+  .theme-playful .notebook-copy h2::after {
+    width: 108px;
+    height: 8px;
+    margin-top: 5px;
+  }
+
+  .theme-fresh .care-mascot,
+  .theme-playful .care-mascot,
+  .theme-tech .care-mascot {
+    width: 118px;
+    height: 88px;
+  }
+
+  .theme-fresh .mascot-face,
+  .theme-playful .mascot-face,
+  .theme-tech .mascot-face {
+    width: 66px;
+    height: 66px;
+  }
+
+  .theme-playful .bubble-field .garden-bubble-orb:nth-of-type(1) {
+    top: 92px;
+  }
+}
