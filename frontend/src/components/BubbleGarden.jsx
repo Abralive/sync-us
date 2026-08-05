@@ -29,7 +29,8 @@ export default function BubbleGarden({
       <div className="garden-header compact">
         <div>
           <span className="garden-kicker">今天的星域</span>
-          <h2>泡泡星域</h2>
+          <h2>今天照顧哪顆？</h2>
+          <p>有些事不用催，只要先被看見。</p>
         </div>
         <button className="btn primary" onClick={hasCouple ? onAddTask : onConnect}>
           {hasCouple ? "新增泡泡" : "連結伴侶"}
@@ -37,8 +38,8 @@ export default function BubbleGarden({
       </div>
 
       <div className="garden-stats">
-        <div><span>目前使用者</span><strong>{activeName}</strong></div>
-        <div><span>照顧中</span><strong>{tasks.length}</strong></div>
+        <div><span>照顧者</span><strong>{activeName}</strong></div>
+        <div><span>待照顧</span><strong>{tasks.length}</strong></div>
         <div><span>星塵</span><strong>{stardust}</strong></div>
       </div>
 
@@ -89,7 +90,7 @@ export default function BubbleGarden({
             )}
           </div>
           {list.length > 0 && (
-            <p className="garden-tip">輕點看細節，長按戳破完成。完成紀錄放在連結頁。</p>
+            <p className="garden-tip">長按泡泡，完成後會落下星塵。</p>
           )}
         </>
       )}

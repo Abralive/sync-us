@@ -5,7 +5,7 @@ export default function Header({ users, activeUser, onActiveUserChange, onLogout
         <div className="brand-mark"></div>
         <div>
           <h1 className="brand-title">Sync-Us</h1>
-          <p className="brand-subtitle">Bubble Growth App</p>
+          <p className="brand-subtitle">兩個人的泡泡星域</p>
         </div>
       </div>
       <div className="topbar-actions">
