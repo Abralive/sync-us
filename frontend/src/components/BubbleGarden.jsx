@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Plus, Sparkles } from "lucide-react";
 import TaskCard from "./TaskCard.jsx";
 import { countdownText, formatDateTime } from "../utils/date.js";
 
@@ -25,75 +26,98 @@ export default function BubbleGarden({
   ];
 
   return (
-    <section className="garden-screen">
-      <div className="garden-header compact">
-        <div>
-          <span className="garden-kicker">今天的星域</span>
-          <h2>今天照顧哪顆？</h2>
-          <p>有些事不用催，只要先被看見。</p>
-        </div>
-        <button className="btn primary" onClick={hasCouple ? onAddTask : onConnect}>
-          {hasCouple ? "新增泡泡" : "連結伴侶"}
-        </button>
-      </div>
+    <section className="garden-screen notebook-home">
+      <div className="notebook-hero">
+        <div className="notebook-copy">
+          <span className="garden-kicker">Daily bubble note</span>
+          <h2>今天先照顧哪幾顆？</h2>
+          <p>把壓力放進泡泡裡。你們不用猜誰比較累，只要一起看見今天正在被照顧的事。</p>
 
-      <div className="garden-stats">
-        <div><span>照顧者</span><strong>{activeName}</strong></div>
-        <div><span>待照顧</span><strong>{tasks.length}</strong></div>
-        <div><span>星塵</span><strong>{stardust}</strong></div>
-      </div>
-
-      {hasCouple && (
-        <div className="seg-control" role="tablist" aria-label="泡泡範圍">
-          {segments.map((item) => (
-            <button
-              key={item.key}
-              role="tab"
-              className={segment === item.key ? "seg active" : "seg"}
-              onClick={() => setSegment(item.key)}
-            >
-              {item.label}
-              <span className="seg-count">{item.count}</span>
+          <div className="hero-flow">
+            <button className="btn primary add-bubble-btn" onClick={hasCouple ? onAddTask : onConnect}>
+              {hasCouple ? <Plus size={18} /> : <Sparkles size={18} />}
+              {hasCouple ? "長一顆泡泡" : "先連結伴侶"}
             </button>
-          ))}
+            <span>長按泡泡完成，星塵會掉進補給罐。</span>
+          </div>
         </div>
-      )}
 
-      {!hasCouple ? (
-        <div className="bubble-field">
-          <div className="field-empty">
-            <strong>還沒有共享星域</strong>
-            <p>先選一個想一起照顧生活的人。</p>
-            <button className="btn primary" onClick={onConnect}>建立連結</button>
+        <div className="couple-note" aria-hidden="true">
+          <div className="care-mascot">
+            <span className="mascot-face one"></span>
+            <span className="mascot-face two"></span>
+            <span className="mascot-bubble"></span>
           </div>
+          <p>不是催促，是一起照顧。</p>
         </div>
-      ) : (
-        <>
-          <div className="bubble-field">
-            {list.length === 0 ? (
-              <div className="field-empty">
-                <p>{segment === "private" ? "私人軌道目前很安靜。" : "還沒有共享泡泡，先長出第一顆吧。"}</p>
-                <button className="btn primary" onClick={onAddTask}>新增泡泡</button>
-              </div>
-            ) : (
-              list.map((task, index) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  activeUser={activeUser}
-                  onRefresh={onRefresh}
-                  variant="garden"
-                  index={index}
-                  onOpenDetails={() => setSelectedTask(task)}
-                />
-              ))
-            )}
+
+        <dl className="garden-stats">
+          <div><dt>今天由</dt><dd>{activeName}</dd></div>
+          <div><dt>待照顧</dt><dd>{tasks.length}</dd></div>
+          <div><dt>星塵</dt><dd>{stardust}</dd></div>
+        </dl>
+      </div>
+
+      <div className="garden-workspace">
+        <div className="workspace-head">
+          <div>
+            <span className="workspace-label">泡泡棲地</span>
+            <strong>{segment === "private" ? "自己的軌道" : "共享的今天"}</strong>
           </div>
-          {list.length > 0 && (
-            <p className="garden-tip">長按泡泡，完成後會落下星塵。</p>
+
+          {hasCouple && (
+            <div className="seg-control" role="tablist" aria-label="泡泡範圍">
+              {segments.map((item) => (
+                <button
+                  key={item.key}
+                  role="tab"
+                  className={segment === item.key ? "seg active" : "seg"}
+                  onClick={() => setSegment(item.key)}
+                >
+                  {item.label}
+                  <span className="seg-count">{item.count}</span>
+                </button>
+              ))}
+            </div>
           )}
-        </>
-      )}
+        </div>
+
+        {!hasCouple ? (
+          <div className="bubble-field">
+            <div className="field-empty">
+              <strong>還沒有共享星域</strong>
+              <p>先選一個想一起照顧生活的人。</p>
+              <button className="btn primary" onClick={onConnect}>建立連結</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="bubble-field">
+              {list.length === 0 ? (
+                <div className="field-empty">
+                  <p>{segment === "private" ? "私人軌道目前很安靜。" : "還沒有共享泡泡，先長出第一顆吧。"}</p>
+                  <button className="btn primary" onClick={onAddTask}>長一顆泡泡</button>
+                </div>
+              ) : (
+                list.map((task, index) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    activeUser={activeUser}
+                    onRefresh={onRefresh}
+                    variant="garden"
+                    index={index}
+                    onOpenDetails={() => setSelectedTask(task)}
+                  />
+                ))
+              )}
+            </div>
+            {list.length > 0 && (
+              <p className="garden-tip">輕點看細節，長按完成。</p>
+            )}
+          </>
+        )}
+      </div>
 
       {selectedTask && (
         <div className="detail-sheet" role="dialog" aria-modal="true">
