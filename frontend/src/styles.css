@@ -5137,3 +5137,262 @@ body {
     grid-template-columns: 102px 1fr;
   }
 }
+
+/* ===== Mobile-first starfield correction ===== */
+.mobile-starfield-controls,
+.mobile-galaxy-tip {
+  display: none;
+}
+
+.galaxy-orbits {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.orbit,
+.orbit-pencil {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.orbit {
+  stroke: rgba(87, 137, 132, 0.26);
+  stroke-width: 1.45;
+}
+
+.orbit-outer {
+  stroke-dasharray: 7 6;
+}
+
+.orbit-middle {
+  stroke: rgba(87, 137, 132, 0.21);
+  transform: rotate(-10deg);
+  transform-origin: 210px 260px;
+}
+
+.orbit-inner {
+  stroke: rgba(232, 164, 145, 0.3);
+  transform: rotate(13deg);
+  transform-origin: 210px 260px;
+}
+
+.orbit-pencil {
+  stroke: rgba(31, 56, 56, 0.13);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.journal-starfield .bubble-layer {
+  z-index: 2;
+}
+
+@media (max-width: 900px) {
+  .shared-journal-app {
+    min-height: 100svh;
+    padding: 10px 12px 112px;
+  }
+
+  .journal-topbar {
+    margin-bottom: 6px;
+  }
+
+  .journal-topbar .brand-title {
+    font-size: 25px;
+  }
+
+  .journal-topbar .brand-subtitle {
+    margin-top: 2px;
+    font-size: 12px;
+  }
+
+  .date-switcher {
+    margin-top: -2px;
+  }
+
+  .date-switcher strong {
+    min-width: 154px;
+    font-size: 18px;
+  }
+
+  .journal-home {
+    display: block;
+  }
+
+  .today-us-panel,
+  .life-side-panel {
+    display: none;
+  }
+
+  .shared-starfield-panel {
+    display: grid;
+    grid-template-rows: auto auto minmax(500px, 66svh) auto auto;
+    gap: 8px;
+    min-height: 0;
+  }
+
+  .starfield-head {
+    padding: 0 4px;
+  }
+
+  .starfield-head span {
+    font-size: 14px;
+  }
+
+  .starfield-head h2 {
+    margin-top: 2px;
+    font-size: 22px;
+    line-height: 1.16;
+  }
+
+  .starfield-head .starfield-hint {
+    display: none;
+  }
+
+  .mobile-starfield-controls {
+    display: grid;
+    gap: 8px;
+  }
+
+  .mobile-scope-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid rgba(31, 56, 56, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 252, 245, 0.66);
+  }
+
+  .mobile-scope-tabs button {
+    min-height: 36px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--journal-muted);
+    font-size: 14px;
+    font-weight: 900;
+  }
+
+  .mobile-scope-tabs button.active {
+    background: var(--journal-ink);
+    color: #fffaf0;
+  }
+
+  .mobile-relation-strip {
+    min-height: 38px;
+    padding: 0 14px;
+    border: 1px solid rgba(31, 56, 56, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 252, 245, 0.7);
+    color: var(--journal-ink);
+    font-weight: 900;
+    text-align: center;
+  }
+
+  .journal-starfield {
+    height: clamp(500px, 66svh, 620px);
+    min-height: 0;
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(184, 225, 219, 0.28), transparent 56%),
+      radial-gradient(circle at 62% 40%, rgba(244, 214, 178, 0.18), transparent 36%),
+      rgba(255, 252, 245, 0.28);
+  }
+
+  .galaxy-orbits {
+    transform: scale(1.08);
+  }
+
+  .journal-starfield .garden-bubble-orb {
+    width: clamp(116px, calc(var(--bubble-size) * 0.75), 184px);
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(1) {
+    left: 8%;
+    top: 12%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(2) {
+    right: 6%;
+    top: 32%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(3) {
+    left: 22%;
+    top: 58%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(n + 4) {
+    right: 10%;
+    top: 67%;
+  }
+
+  .journal-starfield .garden-title {
+    font-size: clamp(14px, calc(var(--bubble-size) / 13), 20px);
+  }
+
+  .journal-starfield .garden-date {
+    bottom: 17%;
+    max-width: 78%;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .journal-starfield .task-bubble-core {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mini-person {
+    width: 23px;
+    height: 23px;
+    font-size: 10px;
+  }
+
+  .mobile-galaxy-tip {
+    display: block;
+    position: fixed;
+    left: 22px;
+    right: 86px;
+    bottom: 91px;
+    z-index: 75;
+    margin: 0;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid rgba(31, 56, 56, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 252, 245, 0.9);
+    box-shadow: 0 10px 22px rgba(31, 56, 56, 0.12);
+    color: var(--journal-muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .new-bubble-cta {
+    position: fixed;
+    right: 22px;
+    bottom: 91px;
+    z-index: 76;
+    width: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    margin: 0;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    box-shadow: 0 9px 0 rgba(178, 78, 60, 0.16), 0 14px 26px rgba(31, 56, 56, 0.14);
+  }
+
+  .new-bubble-cta svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .bottom-nav {
+    z-index: 70;
+  }
+}

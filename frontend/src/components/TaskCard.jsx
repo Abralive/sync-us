@@ -24,7 +24,7 @@ function getBubbleSize(task) {
   return Math.max(132, Math.min(232, Math.round(size)));
 }
 
-export default function TaskCard({ task, onRefresh, variant = "garden", index = 0, onOpenDetails, activeUser }) {
+export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, activeUser }) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -99,7 +99,7 @@ export default function TaskCard({ task, onRefresh, variant = "garden", index = 
       onPointerCancel={cancelHold}
       onPointerLeave={cancelHold}
       onContextMenu={(event) => event.preventDefault()}
-      aria-label={`${task.title}，輕點看細節，長按完成`}
+      aria-label={`${task.title}，點擊查看細節，長按完成`}
     >
       <span className="bubble-ring"></span>
       <span className="bubble-glass"></span>

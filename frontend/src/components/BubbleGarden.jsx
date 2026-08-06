@@ -19,6 +19,17 @@ function sortByDueTime(tasks) {
   return [...tasks].sort((a, b) => new Date(a.due_time) - new Date(b.due_time));
 }
 
+function GalaxyOrbits() {
+  return (
+    <svg className="galaxy-orbits" viewBox="0 0 420 520" aria-hidden="true" focusable="false">
+      <ellipse cx="210" cy="260" rx="186" ry="116" className="orbit orbit-outer" />
+      <ellipse cx="210" cy="260" rx="142" ry="82" className="orbit orbit-middle" />
+      <ellipse cx="210" cy="260" rx="92" ry="52" className="orbit orbit-inner" />
+      <path className="orbit-pencil" d="M70 282 C130 198, 258 186, 350 248" />
+    </svg>
+  );
+}
+
 export default function BubbleGarden({
   tasks,
   stardust,
@@ -31,8 +42,17 @@ export default function BubbleGarden({
   hasCouple,
 }) {
   const [selectedTask, setSelectedTask] = useState(null);
+  const [scope, setScope] = useState("shared");
   const visibleTasks = tasks.filter((task) => !task.is_completed);
-  const starfieldTasks = visibleTasks;
+  const sharedTasks = visibleTasks.filter((task) => !task.is_private);
+  const personalTasks = visibleTasks.filter(
+    (task) =>
+      task.is_private ||
+      task.assigned_to_id === Number(activeUser) ||
+      task.created_by_id === Number(activeUser)
+  );
+  const starfieldTasks = scope === "personal" ? personalTasks : sharedTasks;
+  const fallbackStarfieldTasks = starfieldTasks.length > 0 ? starfieldTasks : visibleTasks;
   const upcomingTasks = useMemo(() => sortByDueTime(visibleTasks).slice(0, 4), [visibleTasks]);
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
@@ -40,6 +60,7 @@ export default function BubbleGarden({
   const secondUser = users[1] || { username: "Kai", id: 2 };
   const stardustGoal = 50;
   const stardustProgress = Math.min(100, Math.round((stardust / stardustGoal) * 100));
+  const relationText = `${firstUser.username} 7/10 ♡ ${secondUser.username} 6/10`;
 
   return (
     <section className="journal-home" aria-label="Sync-Us 首頁">
@@ -106,8 +127,35 @@ export default function BubbleGarden({
           </div>
         </div>
 
+        <div className="mobile-starfield-controls" aria-label="手機星域控制">
+          <div className="mobile-scope-tabs" role="tablist" aria-label="星域範圍">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={scope === "shared"}
+              className={scope === "shared" ? "active" : ""}
+              onClick={() => setScope("shared")}
+            >
+              共享
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={scope === "personal"}
+              className={scope === "personal" ? "active" : ""}
+              onClick={() => setScope("personal")}
+            >
+              個人
+            </button>
+          </div>
+          <button className="mobile-relation-strip" type="button" onClick={onConnect}>
+            {relationText}
+          </button>
+        </div>
+
         {!hasCouple ? (
           <div className="bubble-field journal-starfield empty-starfield">
+            <GalaxyOrbits />
             <div className="field-empty">
               <strong>還沒有共享星域</strong>
               <p>先選一個想一起照顧生活的人。</p>
@@ -116,20 +164,18 @@ export default function BubbleGarden({
           </div>
         ) : (
           <div className="bubble-field journal-starfield">
-            <span className="orbit-line orbit-a"></span>
-            <span className="orbit-line orbit-b"></span>
-            <span className="orbit-line orbit-c"></span>
+            <GalaxyOrbits />
             <span className="tiny-star star-a">✦</span>
             <span className="tiny-star star-b">✧</span>
             <span className="tiny-star star-c">✦</span>
-            {starfieldTasks.length === 0 ? (
+            {fallbackStarfieldTasks.length === 0 ? (
               <div className="field-empty">
-                <p>今天的共享星域很安靜。</p>
+                <p>今天的星域很安靜。</p>
                 <button className="btn primary" onClick={onAddTask}>＋ 新泡泡</button>
               </div>
             ) : (
               <div className="bubble-layer">
-                {starfieldTasks.map((task, index) => (
+                {fallbackStarfieldTasks.map((task, index) => (
                   <TaskCard
                     key={task.id}
                     task={task}
@@ -145,6 +191,7 @@ export default function BubbleGarden({
           </div>
         )}
 
+        <p className="mobile-galaxy-tip">點一下看細節，長按戳破完成。</p>
         <button className="new-bubble-cta" type="button" onClick={hasCouple ? onAddTask : onConnect}>
           <Plus size={22} />
           新泡泡
