@@ -11,9 +11,6 @@ import TaskForm from "./components/TaskForm.jsx";
 
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const REVIEW_MODE = SEARCH_PARAMS.get("review") === "1";
-const VISUAL_STYLES = ["fresh", "playful", "tech"];
-const REQUESTED_STYLE = SEARCH_PARAMS.get("style");
-const INITIAL_VISUAL_STYLE = VISUAL_STYLES.includes(REQUESTED_STYLE) ? REQUESTED_STYLE : "fresh";
 
 export default function App() {
   const [users, setUsers] = useState([]);
@@ -24,7 +21,6 @@ export default function App() {
   const [activeUser, setActiveUser] = useState(1);
   const [isAuthenticated, setIsAuthenticated] = useState(REVIEW_MODE);
   const [activeTab, setActiveTab] = useState("home");
-  const [visualStyle, setVisualStyle] = useState(INITIAL_VISUAL_STYLE);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -81,10 +77,6 @@ export default function App() {
     load();
   }, [activeUser, refreshTick]);
 
-  useEffect(() => {
-    document.body.dataset.visualStyle = visualStyle;
-  }, [visualStyle]);
-
   const activeName = useMemo(
     () => users.find((user) => user.id === Number(activeUser))?.username || "Sync",
     [users, activeUser]
@@ -122,21 +114,27 @@ export default function App() {
   }
 
   return (
-    <main className={`app-shell game-shell theme-${visualStyle}`}>
-      <Header users={users} activeUser={activeUser} onActiveUserChange={setActiveUser} onLogout={logout} />
+    <main className="app-shell game-shell shared-journal-app">
+      <Header
+        users={users}
+        activeUser={activeUser}
+        activeTab={activeTab}
+        onActiveUserChange={setActiveUser}
+        onTabChange={handleTabChange}
+        onLogout={logout}
+      />
 
       {activeTab === "home" && (
         <BubbleGarden
           tasks={tasks}
           stardust={stardust}
           activeName={activeName}
+          users={users}
           activeUser={activeUser}
           onRefresh={refresh}
           onAddTask={() => setActiveTab("tasks")}
           onConnect={() => setActiveTab("partner")}
           hasCouple={Boolean(couple)}
-          visualStyle={visualStyle}
-          onVisualStyleChange={setVisualStyle}
         />
       )}
 

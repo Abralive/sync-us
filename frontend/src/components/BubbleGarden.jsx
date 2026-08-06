@@ -1,110 +1,113 @@
-import { useState } from "react";
-import { Plus, Sparkles } from "lucide-react";
+import { CalendarDays, Heart, MessageCircle, Plus, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
 import TaskCard from "./TaskCard.jsx";
 import { countdownText, formatDateTime } from "../utils/date.js";
+
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getInitial(name) {
+  return name?.trim()?.slice(0, 1) || "?";
+}
+
+function sortByDueTime(tasks) {
+  return [...tasks].sort((a, b) => new Date(a.due_time) - new Date(b.due_time));
+}
 
 export default function BubbleGarden({
   tasks,
   stardust,
   activeName,
+  users,
   activeUser,
   onRefresh,
   onAddTask,
   onConnect,
   hasCouple,
-  visualStyle,
-  onVisualStyleChange,
 }) {
-  const [segment, setSegment] = useState("shared");
   const [selectedTask, setSelectedTask] = useState(null);
-
-  const shared = tasks.filter((task) => !task.is_private);
-  const privates = tasks.filter((task) => task.is_private);
-  const list = segment === "private" ? privates : shared;
-
-  const segments = [
-    { key: "shared", label: "共享", count: shared.length },
-    { key: "private", label: "私人", count: privates.length },
-  ];
-  const styleOptions = [
-    { key: "fresh", label: "清新" },
-    { key: "playful", label: "活潑" },
-    { key: "tech", label: "科技" },
-  ];
+  const visibleTasks = tasks.filter((task) => !task.is_completed);
+  const starfieldTasks = visibleTasks;
+  const upcomingTasks = useMemo(() => sortByDueTime(visibleTasks).slice(0, 4), [visibleTasks]);
+  const today = new Date();
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
+  const firstUser = users[0] || { username: "Mina", id: 1 };
+  const secondUser = users[1] || { username: "Kai", id: 2 };
+  const stardustGoal = 50;
+  const stardustProgress = Math.min(100, Math.round((stardust / stardustGoal) * 100));
 
   return (
-    <section className="garden-screen notebook-home">
-      <div className="notebook-hero">
-        <div className="notebook-copy">
-          <div className="hero-meta-row">
-            <span className="garden-kicker">Daily bubble note</span>
-            <div className="style-switcher" aria-label="主視覺版本">
-              {styleOptions.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={visualStyle === item.key ? "active" : ""}
-                  onClick={() => onVisualStyleChange(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <h2>今天先照顧哪幾顆？</h2>
-          <p>把壓力放進泡泡裡。你們不用猜誰比較累，只要一起看見今天正在被照顧的事。</p>
+    <section className="journal-home" aria-label="Sync-Us 首頁">
+      <aside className="today-us-panel" aria-label="今天的我們">
+        <span className="tape tape-teal"></span>
+        <div className="handwritten-title">
+          <h2>今天的我們</h2>
+          <span>快速打個氣吧</span>
+        </div>
 
-          <div className="hero-flow">
-            <button className="btn primary add-bubble-btn" onClick={hasCouple ? onAddTask : onConnect}>
-              {hasCouple ? <Plus size={18} /> : <Sparkles size={18} />}
-              {hasCouple ? "長一顆泡泡" : "先連結伴侶"}
+        <div className="mood-pair">
+          {[firstUser, secondUser].map((user, index) => (
+            <div className="mood-person" key={user.id}>
+              <button
+                type="button"
+                className={`large-avatar avatar-${index + 1} ${Number(activeUser) === user.id ? "active" : ""}`}
+                aria-label={`${user.username} 的今日狀態`}
+              >
+                <span>{getInitial(user.username)}</span>
+              </button>
+              <strong>{user.username}</strong>
+              <span className="mood-score">
+                <Heart size={15} />
+                {index === 0 ? "7/10" : "6/10"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="care-message">
+          <MessageCircle size={17} />
+          <p>謝謝你昨天幫我處理那麼多事，今晚散步後一起看電影吧 :)</p>
+        </div>
+
+        <div className="week-strip" aria-label="一週日期">
+          {weekDays.map((date, index) => (
+            <button
+              key={date.toISOString()}
+              type="button"
+              className={index === 3 ? "active" : ""}
+              aria-label={`${date.getMonth() + 1} 月 ${date.getDate()} 日，星期${WEEKDAYS[date.getDay()]}`}
+            >
+              <span>{WEEKDAYS[date.getDay()]}</span>
+              <strong>{date.getDate()}</strong>
             </button>
-            <span>長按泡泡完成，星塵會掉進補給罐。</span>
-          </div>
+          ))}
         </div>
 
-        <div className="couple-note" aria-hidden="true">
-          <div className="care-mascot">
-            <span className="mascot-face one"></span>
-            <span className="mascot-face two"></span>
-            <span className="mascot-bubble"></span>
-          </div>
-          <p>不是催促，是一起照顧。</p>
+        <div className="weekly-note">
+          <span>本週小目標</span>
+          <p>一起規劃一次小旅行</p>
         </div>
+      </aside>
 
-        <dl className="garden-stats">
-          <div><dt>今天由</dt><dd>{activeName}</dd></div>
-          <div><dt>待照顧</dt><dd>{tasks.length}</dd></div>
-          <div><dt>星塵</dt><dd>{stardust}</dd></div>
-        </dl>
-      </div>
-
-      <div className="garden-workspace">
-        <div className="workspace-head">
+      <main className="shared-starfield-panel" aria-label="共享星域">
+        <div className="starfield-head">
           <div>
-            <span className="workspace-label">泡泡棲地</span>
-            <strong>{segment === "private" ? "自己的軌道" : "共享的今天"}</strong>
+            <span>共享星域</span>
+            <h2>看見彼此正在扛的事</h2>
           </div>
-
-          {hasCouple && (
-            <div className="seg-control" role="tablist" aria-label="泡泡範圍">
-              {segments.map((item) => (
-                <button
-                  key={item.key}
-                  role="tab"
-                  className={segment === item.key ? "seg active" : "seg"}
-                  onClick={() => setSegment(item.key)}
-                >
-                  {item.label}
-                  <span className="seg-count">{item.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="starfield-hint">
+            <Sparkles size={18} />
+            長按泡泡完成，讓壓力變成星塵
+          </div>
         </div>
 
         {!hasCouple ? (
-          <div className="bubble-field">
+          <div className="bubble-field journal-starfield empty-starfield">
             <div className="field-empty">
               <strong>還沒有共享星域</strong>
               <p>先選一個想一起照顧生活的人。</p>
@@ -112,15 +115,21 @@ export default function BubbleGarden({
             </div>
           </div>
         ) : (
-          <>
-            <div className="bubble-field">
-              {list.length === 0 ? (
-                <div className="field-empty">
-                  <p>{segment === "private" ? "私人軌道目前很安靜。" : "還沒有共享泡泡，先長出第一顆吧。"}</p>
-                  <button className="btn primary" onClick={onAddTask}>長一顆泡泡</button>
-                </div>
-              ) : (
-                list.map((task, index) => (
+          <div className="bubble-field journal-starfield">
+            <span className="orbit-line orbit-a"></span>
+            <span className="orbit-line orbit-b"></span>
+            <span className="orbit-line orbit-c"></span>
+            <span className="tiny-star star-a">✦</span>
+            <span className="tiny-star star-b">✧</span>
+            <span className="tiny-star star-c">✦</span>
+            {starfieldTasks.length === 0 ? (
+              <div className="field-empty">
+                <p>今天的共享星域很安靜。</p>
+                <button className="btn primary" onClick={onAddTask}>＋ 新泡泡</button>
+              </div>
+            ) : (
+              <div className="bubble-layer">
+                {starfieldTasks.map((task, index) => (
                   <TaskCard
                     key={task.id}
                     task={task}
@@ -130,15 +139,69 @@ export default function BubbleGarden({
                     index={index}
                     onOpenDetails={() => setSelectedTask(task)}
                   />
-                ))
-              )}
-            </div>
-            {list.length > 0 && (
-              <p className="garden-tip">輕點看細節，長按完成。</p>
+                ))}
+              </div>
             )}
-          </>
+          </div>
         )}
-      </div>
+
+        <button className="new-bubble-cta" type="button" onClick={hasCouple ? onAddTask : onConnect}>
+          <Plus size={22} />
+          新泡泡
+        </button>
+      </main>
+
+      <aside className="life-side-panel" aria-label="生活資訊">
+        <section className="mini-schedule">
+          <span className="paper-clip"></span>
+          <div className="side-title">
+            <CalendarDays size={18} />
+            <h3>近期行程</h3>
+          </div>
+          <div className="mini-week">
+            {weekDays.slice(2, 7).map((date, index) => (
+              <span key={date.toISOString()} className={index === 1 ? "active" : ""}>
+                {date.getDate()}
+              </span>
+            ))}
+          </div>
+          <div className="schedule-list">
+            {upcomingTasks.map((task) => (
+              <button key={task.id} type="button" onClick={() => setSelectedTask(task)}>
+                <i className={task.priority_weight >= 80 ? "hot" : task.priority_weight >= 55 ? "warm" : "cool"}></i>
+                <span>
+                  <strong>{task.title}</strong>
+                  <small>{formatDateTime(task.due_time)}</small>
+                </span>
+                <em>{task.assigned_to_name ? getInitial(task.assigned_to_name) : "雙"}</em>
+              </button>
+            ))}
+            {upcomingTasks.length === 0 && <p className="quiet-empty">沒有近期行程。</p>}
+          </div>
+        </section>
+
+        <section className="stardust-bottle">
+          <div className="side-title">
+            <Sparkles size={18} />
+            <h3>我們的星塵瓶</h3>
+          </div>
+          <div className="bottle-illustration" aria-hidden="true">
+            <span className="bottle-cap"></span>
+            <span className="bottle-glass"></span>
+            <span className="bottle-star s1">★</span>
+            <span className="bottle-star s2">✦</span>
+            <span className="bottle-star s3">★</span>
+          </div>
+          <div className="stardust-copy">
+            <strong>{stardust} 顆</strong>
+            <p>再完成幾顆，就能收集星塵。</p>
+            <div className="progress-track">
+              <span style={{ width: `${stardustProgress}%` }}></span>
+            </div>
+            <small>{stardust} / {stardustGoal}</small>
+          </div>
+        </section>
+      </aside>
 
       {selectedTask && (
         <div className="detail-sheet" role="dialog" aria-modal="true">
@@ -154,7 +217,7 @@ export default function BubbleGarden({
             {selectedTask.assigned_to_name && <p>交給 {selectedTask.assigned_to_name}</p>}
             <div className="sheet-meta">
               <span>重要度 {selectedTask.priority_weight}</span>
-              <span>照顧中</span>
+              <span>{selectedTask.created_by_name ? `建立者 ${selectedTask.created_by_name}` : "照顧中"}</span>
             </div>
             <p className="pop-hint">回到星域長按這顆泡泡，就能戳破完成。</p>
           </div>

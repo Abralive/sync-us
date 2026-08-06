@@ -5,6 +5,25 @@ import { playPop, unlockAudio } from "../utils/sound.js";
 
 const POP_HOLD_MS = 1100;
 
+function getInitial(name) {
+  return name?.trim()?.slice(0, 1) || "?";
+}
+
+function getParticipants(task) {
+  if (!task.is_private && !task.assigned_to_name) {
+    return [task.created_by_name || "Mina", "Kai"];
+  }
+  return [task.assigned_to_name || task.created_by_name || "Sync"];
+}
+
+function getBubbleSize(task) {
+  const due = new Date(task.due_time);
+  const hoursLeft = (due - new Date()) / 36e5;
+  const urgencyBoost = hoursLeft < 0 ? 18 : hoursLeft < 24 ? 20 : hoursLeft < 72 ? 12 : 0;
+  const size = 118 + (Number(task.priority_weight) || 0) * 0.92 + urgencyBoost;
+  return Math.max(132, Math.min(232, Math.round(size)));
+}
+
 export default function TaskCard({ task, onRefresh, variant = "garden", index = 0, onOpenDetails, activeUser }) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
@@ -12,6 +31,8 @@ export default function TaskCard({ task, onRefresh, variant = "garden", index = 
   const holdTimer = useRef(null);
   const poppedRef = useRef(false);
   const weightTone = task.priority_weight >= 80 ? "heavy" : task.priority_weight >= 55 ? "medium" : "light";
+  const participants = getParticipants(task);
+  const bubbleSize = getBubbleSize(task);
 
   async function popComplete() {
     setBusy(true);
@@ -67,7 +88,11 @@ export default function TaskCard({ task, onRefresh, variant = "garden", index = 
   return (
     <button
       className={`garden-bubble-orb ${weightTone} ${holding ? "holding" : ""} ${popping ? "popping" : ""}`}
-      style={{ "--float-delay": `${index * -0.85}s`, "--hold-ms": `${POP_HOLD_MS}ms` }}
+      style={{
+        "--float-delay": `${index * -0.85}s`,
+        "--hold-ms": `${POP_HOLD_MS}ms`,
+        "--bubble-size": `${bubbleSize}px`,
+      }}
       onClick={handleClick}
       onPointerDown={startHold}
       onPointerUp={cancelHold}
@@ -81,7 +106,20 @@ export default function TaskCard({ task, onRefresh, variant = "garden", index = 
       <span className="bubble-sheen"></span>
       <span className="task-bubble-core"></span>
       <span className="garden-title">{task.title}</span>
+      <span className="bubble-people" aria-hidden="true">
+        {participants.slice(0, 2).map((name, personIndex) => (
+          <span key={`${name}-${personIndex}`} className={`mini-person avatar-${personIndex + 1}`}>
+            {getInitial(name)}
+          </span>
+        ))}
+      </span>
       <span className="garden-date">{formatDateTime(task.due_time)}</span>
+      <span className="bubble-tooltip" role="tooltip">
+        <strong>{task.title}</strong>
+        <small>{formatDateTime(task.due_time)}</small>
+        <small>{task.created_by_name ? `建立者 ${task.created_by_name}` : "共享泡泡"}</small>
+        {task.description && <span>{task.description}</span>}
+      </span>
       {holding && <span className="garden-hold-hint">快破了</span>}
       {burst}
     </button>
