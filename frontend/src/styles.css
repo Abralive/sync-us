@@ -5138,6 +5138,698 @@ body {
   }
 }
 
+/* ===== Mobile connection journal and bubble agenda ===== */
+.connection-journal,
+.bubble-agenda-page {
+  color: var(--journal-ink);
+}
+
+.connection-page-title {
+  margin: 8px 0 18px;
+}
+
+.connection-page-title span,
+.bubble-agenda-title h2 {
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+}
+
+.connection-page-title h2 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.connection-page-title span {
+  display: inline-block;
+  border-bottom: 2px solid rgba(31, 56, 56, 0.22);
+  color: var(--journal-ink);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.connection-paper {
+  position: relative;
+  margin-bottom: 22px;
+  padding: 26px 22px;
+  border: 1px solid rgba(31, 56, 56, 0.1);
+  background:
+    linear-gradient(180deg, transparent 31px, rgba(141, 187, 176, 0.07) 32px, transparent 33px) 0 0 / 100% 32px,
+    rgba(255, 252, 245, 0.76);
+  box-shadow: 0 16px 30px rgba(31, 56, 56, 0.08);
+}
+
+.connection-paper.today {
+  border-radius: 10px 13px 9px 12px;
+}
+
+.connection-paper.message {
+  border-radius: 8px 12px 11px 9px;
+}
+
+.connection-paper h3,
+.memory-strip-section h3,
+.weekly-promise-paper span {
+  margin: 0 0 18px;
+  color: var(--journal-ink);
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.paper-tape {
+  position: absolute;
+  left: 45%;
+  width: 72px;
+  height: 22px;
+  border-radius: 5px;
+  opacity: 0.58;
+  transform: rotate(-3deg);
+}
+
+.paper-tape.tape-top {
+  top: -13px;
+  background: var(--journal-apricot);
+}
+
+.paper-tape.tape-middle {
+  top: -13px;
+  background: var(--journal-green);
+}
+
+.connection-mood-line {
+  display: grid;
+  grid-template-columns: 1fr 72px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.journal-person {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.journal-avatar {
+  width: 82px;
+  height: 82px;
+  display: grid;
+  place-items: center;
+  border: 3px solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 900;
+  box-shadow: 0 10px 20px rgba(31, 56, 56, 0.1);
+}
+
+.journal-person em {
+  font-style: normal;
+  color: var(--journal-muted);
+  font-weight: 900;
+}
+
+.heart-line {
+  position: relative;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--journal-coral), transparent);
+}
+
+.heart-line::after {
+  content: "♡";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: var(--journal-coral);
+  font-size: 28px;
+  transform: translate(-50%, -55%);
+}
+
+.connection-paper.message p {
+  margin: 0 0 22px;
+  color: #38514e;
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 18px;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.response-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px dashed rgba(31, 56, 56, 0.16);
+}
+
+.response-row button {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-height: 78px;
+  padding-top: 14px;
+  background: transparent;
+  color: var(--journal-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.response-row button + button {
+  border-left: 1px dashed rgba(31, 56, 56, 0.16);
+}
+
+.memory-strip-section {
+  margin-top: 26px;
+}
+
+.memory-strips {
+  display: grid;
+  gap: 14px;
+}
+
+.memory-strip {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  align-items: center;
+  min-height: 60px;
+  padding: 8px 18px;
+  border: 1px solid rgba(31, 56, 56, 0.08);
+  box-shadow: 0 10px 20px rgba(31, 56, 56, 0.06);
+}
+
+.memory-strip span {
+  width: fit-content;
+  padding: 2px 7px;
+  border: 2px solid rgba(68, 123, 118, 0.48);
+  color: var(--journal-green);
+  font-weight: 900;
+  transform: rotate(-4deg);
+}
+
+.memory-strip strong {
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.strip-1 { background: rgba(255, 252, 245, 0.72); transform: rotate(-1.2deg); }
+.strip-2 { background: rgba(255, 248, 235, 0.82); transform: rotate(0.7deg); }
+.strip-3 { background: rgba(238, 247, 244, 0.82); transform: rotate(-0.7deg); }
+
+.weekly-promise-paper {
+  margin: 32px 0 18px;
+  padding: 22px 24px;
+  border-radius: 8px;
+  background: rgba(250, 231, 176, 0.42);
+  border: 1px solid rgba(31, 56, 56, 0.09);
+}
+
+.weekly-promise-paper span {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.weekly-promise-paper strong {
+  display: block;
+  color: var(--journal-ink);
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.bubble-mobile-shell {
+  padding-bottom: 118px;
+}
+
+.bubble-agenda-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 18px;
+}
+
+.bubble-agenda-title h2 {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 900;
+}
+
+.agenda-add-button {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: var(--journal-coral);
+  color: #fffaf0;
+  box-shadow: 0 12px 22px rgba(232, 116, 94, 0.24);
+  font-size: 42px;
+  line-height: 1;
+}
+
+.agenda-date-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(58px, 1fr));
+  gap: 0;
+  margin-bottom: 20px;
+  padding: 14px 10px;
+  overflow-x: auto;
+  border: 1px solid rgba(31, 56, 56, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.7);
+  box-shadow: 0 12px 24px rgba(31, 56, 56, 0.07);
+}
+
+.agenda-date-strip button {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-height: 86px;
+  border-right: 1px dashed rgba(31, 56, 56, 0.12);
+  background: transparent;
+  color: var(--journal-muted);
+  font-weight: 800;
+}
+
+.agenda-date-strip button:last-child {
+  border-right: 0;
+}
+
+.agenda-date-strip button strong {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--journal-ink);
+  font-size: 22px;
+}
+
+.agenda-date-strip button.active strong {
+  background: var(--journal-ink);
+  color: #fffaf0;
+}
+
+.agenda-date-strip i,
+.agenda-calendar-cell i {
+  display: inline-flex;
+  gap: 4px;
+  min-height: 8px;
+}
+
+.agenda-date-strip em,
+.agenda-calendar-cell em {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.hot { background: var(--journal-pink); }
+.warm { background: #eebd4f; }
+.cool { background: var(--journal-green); }
+
+.agenda-tools {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.agenda-search {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  border: 1px solid rgba(31, 56, 56, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.58);
+}
+
+.agenda-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--journal-ink);
+  font: inherit;
+  outline: 0;
+}
+
+.agenda-mode-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(31, 56, 56, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.62);
+}
+
+.agenda-mode-switch button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--journal-muted);
+  font-weight: 900;
+}
+
+.agenda-mode-switch button.active {
+  background: var(--journal-ink);
+  color: #fffaf0;
+}
+
+.agenda-filter-drawer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 252, 245, 0.82);
+}
+
+.agenda-filter-drawer label {
+  display: grid;
+  gap: 6px;
+  color: var(--journal-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.agenda-filter-drawer select {
+  min-height: 42px;
+  border: 1px solid rgba(31, 56, 56, 0.12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.agenda-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin: 18px 4px 14px;
+}
+
+.agenda-section-head h3 {
+  margin: 0;
+  border-bottom: 2px solid rgba(68, 123, 118, 0.36);
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 25px;
+}
+
+.agenda-section-head h3 span {
+  color: var(--journal-muted);
+  font-family: inherit;
+  font-size: 18px;
+}
+
+.agenda-section-head p {
+  margin: 0;
+  color: var(--journal-muted);
+  font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+  font-size: 15px;
+}
+
+.agenda-task-list {
+  display: grid;
+  gap: 16px;
+}
+
+.agenda-task-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 1fr auto 40px;
+  gap: 12px;
+  align-items: center;
+  min-height: 82px;
+  padding: 12px 14px;
+  border: 1px solid rgba(31, 56, 56, 0.08);
+  border-radius: 8px 11px 9px 7px;
+  background: rgba(255, 252, 245, 0.72);
+  box-shadow: 0 10px 22px rgba(31, 56, 56, 0.07);
+}
+
+.agenda-bubble-dot {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  box-shadow: inset 10px 10px 18px rgba(255, 255, 255, 0.52), 0 8px 16px rgba(31, 56, 56, 0.08);
+}
+
+.agenda-task-title strong {
+  display: block;
+  color: var(--journal-ink);
+  font-size: 18px;
+}
+
+.agenda-task-title small {
+  display: block;
+  margin-top: 5px;
+  color: var(--journal-muted);
+  font-size: 13px;
+}
+
+.agenda-people {
+  display: inline-flex;
+}
+
+.agenda-people span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
+  background: rgba(141, 187, 176, 0.34);
+  color: var(--journal-ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.agenda-people span + span {
+  margin-left: -8px;
+  background: rgba(242, 185, 173, 0.42);
+}
+
+.agenda-check {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(31, 56, 56, 0.42);
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+}
+
+.agenda-check:focus-visible,
+.agenda-check:hover {
+  color: var(--journal-ink);
+}
+
+.agenda-divider {
+  margin: 28px 0 18px;
+  border-top: 1px dashed rgba(31, 56, 56, 0.22);
+}
+
+.agenda-empty {
+  color: var(--journal-muted);
+  font-weight: 800;
+}
+
+.agenda-filter-fab {
+  position: fixed;
+  left: 50%;
+  bottom: 87px;
+  z-index: 65;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 999px 999px 10px 10px;
+  background: rgba(255, 252, 245, 0.94);
+  color: var(--journal-ink);
+  box-shadow: 0 10px 22px rgba(31, 56, 56, 0.12);
+  font-weight: 900;
+  transform: translateX(-50%);
+}
+
+.agenda-calendar-panel {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 252, 245, 0.76);
+}
+
+.agenda-calendar-panel > strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.agenda-calendar-week,
+.agenda-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.agenda-calendar-week span {
+  color: var(--journal-muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.agenda-calendar-cell {
+  min-height: 58px;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border: 1px solid rgba(31, 56, 56, 0.07);
+  color: var(--journal-ink);
+}
+
+.agenda-calendar-cell.blank {
+  opacity: 0.28;
+}
+
+.task-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+}
+
+.task-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 56, 56, 0.22);
+}
+
+.task-sheet-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: min(82svh, 720px);
+  overflow-y: auto;
+  padding: 12px 18px 24px;
+  border-radius: 28px 28px 0 0;
+  background:
+    linear-gradient(180deg, transparent 31px, rgba(141, 187, 176, 0.07) 32px, transparent 33px) 0 0 / 100% 32px,
+    #fffaf1;
+  box-shadow: 0 -24px 50px rgba(31, 56, 56, 0.2);
+}
+
+.task-sheet-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.task-sheet-title span {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.task-sheet-title button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(31, 56, 56, 0.08);
+  color: var(--journal-ink);
+  font-size: 24px;
+}
+
+.bubble-sheet-form {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .connection-journal,
+  .bubble-mobile-shell {
+    padding-bottom: 148px;
+  }
+
+  .connect-page {
+    gap: 0;
+  }
+
+  .connection-page-title {
+    margin-top: 6px;
+  }
+
+  .connection-page-title h2 {
+    font-family: "Segoe Print", "Comic Sans MS", "Microsoft JhengHei UI", sans-serif;
+    font-size: 25px;
+    line-height: 1.28;
+  }
+
+  .connection-journal .memory-strip-section {
+    margin-top: 58px;
+  }
+
+  .agenda-tools {
+    grid-template-columns: 1fr auto;
+  }
+
+  .agenda-mode-switch {
+    justify-self: end;
+    margin-top: 0;
+  }
+
+  .agenda-date-strip {
+    margin-left: -4px;
+    margin-right: -4px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    overflow: hidden;
+    padding: 12px 6px;
+  }
+
+  .agenda-date-strip button {
+    min-height: 78px;
+  }
+
+  .agenda-date-strip button strong {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+
+  .agenda-search {
+    min-width: 0;
+    padding: 0 12px;
+  }
+
+  .agenda-mode-switch button {
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .bubble-agenda-title {
+    position: relative;
+    min-height: 62px;
+    padding-right: 76px;
+  }
+
+  .agenda-add-button {
+    position: fixed;
+    top: 132px;
+    right: 20px;
+    z-index: 90;
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    padding: 0 0 4px;
+    line-height: 1;
+    pointer-events: auto;
+  }
+}
+
 /* ===== Mobile-first starfield correction ===== */
 .mobile-starfield-controls,
 .mobile-galaxy-tip {

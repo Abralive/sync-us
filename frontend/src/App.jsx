@@ -21,6 +21,7 @@ export default function App() {
   const [activeUser, setActiveUser] = useState(1);
   const [isAuthenticated, setIsAuthenticated] = useState(REVIEW_MODE);
   const [activeTab, setActiveTab] = useState("home");
+  const [isTaskSheetOpen, setIsTaskSheetOpen] = useState(false);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -93,6 +94,7 @@ export default function App() {
 
   function handleTabChange(nextTab) {
     setActiveTab(nextTab);
+    setIsTaskSheetOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -152,22 +154,38 @@ export default function App() {
       )}
 
       {activeTab === "tasks" && (
-        <section className="growth-page">
-          <div className="growth-intro">
-            <span className="garden-kicker">泡泡管理</span>
-            <h2>安排要一起面對的事</h2>
-            <p>清單適合快速處理，日曆適合看時間分布。星域只留下需要被照顧的泡泡。</p>
-          </div>
+        <section className="growth-page bubble-mobile-shell">
           {!couple && (
             <div className="connect-inline">
               先建立伴侶連結，才能把泡泡放進共享星域。
               <button className="btn primary" onClick={() => setActiveTab("partner")}>去連結</button>
             </div>
           )}
-          {couple && <TaskForm users={users} activeUser={activeUser} coupleId={coupleId} onCreated={refresh} />}
           {error && <div className="error">{error}</div>}
-          <TaskBoard tasks={tasks} activeUser={activeUser} onRefresh={refresh} />
+          <TaskBoard tasks={tasks} activeUser={activeUser} onRefresh={refresh} onAddTask={() => setIsTaskSheetOpen(true)} />
         </section>
+      )}
+
+      {activeTab === "tasks" && couple && isTaskSheetOpen && (
+        <div className="task-sheet" role="dialog" aria-modal="true" aria-label="新增泡泡">
+          <button className="task-sheet-backdrop" type="button" onClick={() => setIsTaskSheetOpen(false)} aria-label="關閉新增泡泡"></button>
+          <section className="task-sheet-panel">
+            <button className="sheet-handle" type="button" onClick={() => setIsTaskSheetOpen(false)} aria-label="關閉"></button>
+            <div className="task-sheet-title">
+              <span>新增泡泡</span>
+              <button type="button" onClick={() => setIsTaskSheetOpen(false)} aria-label="關閉">×</button>
+            </div>
+            <TaskForm
+              users={users}
+              activeUser={activeUser}
+              coupleId={coupleId}
+              onCreated={() => {
+                refresh();
+                setIsTaskSheetOpen(false);
+              }}
+            />
+          </section>
+        </div>
       )}
 
       {activeTab === "shop" && <ShopPage stardust={stardust} />}
@@ -175,8 +193,8 @@ export default function App() {
       {activeTab === "profile" && (
         <section className="profile-page panel">
           <span className="garden-kicker">我的</span>
-          <h2>我的小星球</h2>
-          <p>{activeName} 目前照顧了 {stats?.total || 0} 顆泡泡，完成 {stats?.completed || 0} 顆，累積 {stardust} 星塵。</p>
+          <h2>我的同步狀態</h2>
+          <p>{activeName} 目前照顧 {stats?.total || 0} 顆泡泡，已完成 {stats?.completed || 0} 顆，累積 {stardust} 顆星塵。</p>
           <button className="btn" onClick={logout}>登出</button>
         </section>
       )}
