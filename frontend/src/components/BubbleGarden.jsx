@@ -121,13 +121,6 @@ export default function BubbleGarden({
             <span>共享星域</span>
             <h2>看見彼此正在扛的事</h2>
           </div>
-          <div className="starfield-hint">
-            <Sparkles size={18} />
-            長按泡泡完成，讓壓力變成星塵
-          </div>
-        </div>
-
-        <div className="mobile-starfield-controls" aria-label="手機星域控制">
           <div className="mobile-scope-tabs" role="tablist" aria-label="星域範圍">
             <button
               type="button"
@@ -148,6 +141,13 @@ export default function BubbleGarden({
               個人
             </button>
           </div>
+          <div className="starfield-hint">
+            <Sparkles size={18} />
+            長按泡泡完成，讓壓力變成星塵
+          </div>
+        </div>
+
+        <div className="mobile-starfield-controls" aria-label="手機星域控制">
           <button className="mobile-relation-strip" type="button" onClick={onConnect}>
             {relationText}
           </button>
@@ -188,10 +188,10 @@ export default function BubbleGarden({
                 ))}
               </div>
             )}
+            <p className="mobile-galaxy-tip">點一下看細節，長按戳破完成。</p>
           </div>
         )}
 
-        <p className="mobile-galaxy-tip">點一下看細節，長按戳破完成。</p>
         <button className="new-bubble-cta" type="button" onClick={hasCouple ? onAddTask : onConnect}>
           <Plus size={22} />
           新泡泡

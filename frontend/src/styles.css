@@ -5396,3 +5396,255 @@ body {
     z-index: 70;
   }
 }
+
+/* ===== Mobile release density pass ===== */
+.starfield-head .mobile-scope-tabs {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .shared-journal-app {
+    padding-top: 8px;
+  }
+
+  .journal-topbar {
+    min-height: 104px;
+    max-height: 104px;
+    align-content: start;
+    gap: 4px 10px;
+    margin-bottom: 2px;
+  }
+
+  .journal-topbar .brand {
+    align-items: center;
+    gap: 8px;
+  }
+
+  .journal-topbar .brand-mark {
+    width: 42px;
+    height: 30px;
+  }
+
+  .journal-topbar .brand-title {
+    font-size: 24px;
+  }
+
+  .journal-topbar .brand-subtitle {
+    display: none;
+  }
+
+  .journal-actions {
+    gap: 8px;
+  }
+
+  .mobile-user-select {
+    min-height: 38px;
+    max-width: 116px;
+    padding: 0 12px;
+  }
+
+  .date-switcher {
+    margin-top: 0;
+    gap: 12px;
+  }
+
+  .date-switcher button,
+  .icon-settings {
+    width: 38px;
+    height: 38px;
+  }
+
+  .date-switcher strong {
+    min-width: 150px;
+    font-size: 18px;
+  }
+
+  .shared-starfield-panel {
+    position: relative;
+    grid-template-rows: auto auto minmax(540px, calc(100svh - 270px)) auto;
+    gap: 6px;
+  }
+
+  .starfield-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 10px;
+    padding: 0 4px;
+  }
+
+  .starfield-head > div:first-child {
+    min-width: 0;
+  }
+
+  .starfield-head span {
+    font-size: 13px;
+  }
+
+  .starfield-head h2 {
+    max-width: 210px;
+    margin-top: 1px;
+    font-size: 21px;
+  }
+
+  .starfield-head .mobile-scope-tabs {
+    width: 142px;
+    height: 36px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid rgba(31, 56, 56, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 252, 245, 0.58);
+  }
+
+  .starfield-head .mobile-scope-tabs button {
+    min-height: 28px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--journal-muted);
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .starfield-head .mobile-scope-tabs button.active {
+    background: var(--journal-ink);
+    color: #fffaf0;
+  }
+
+  .mobile-starfield-controls {
+    display: block;
+  }
+
+  .mobile-starfield-controls .mobile-scope-tabs {
+    display: none;
+  }
+
+  .mobile-relation-strip {
+    width: auto;
+    min-height: 22px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: rgba(31, 56, 56, 0.66);
+    font-size: 13px;
+    line-height: 1.25;
+    text-align: left;
+  }
+
+  .journal-starfield {
+    height: clamp(540px, calc(100svh - 270px), 590px);
+    background:
+      radial-gradient(circle at 50% 45%, rgba(184, 225, 219, 0.24), transparent 54%),
+      radial-gradient(circle at 62% 42%, rgba(244, 214, 178, 0.14), transparent 34%),
+      rgba(255, 252, 245, 0.22);
+  }
+
+  .galaxy-orbits {
+    transform: scale(1.02);
+  }
+
+  .orbit {
+    stroke: rgba(68, 123, 118, 0.3);
+    stroke-width: 1.55;
+  }
+
+  .orbit-outer {
+    stroke-dasharray: 6 7;
+    stroke: rgba(68, 123, 118, 0.2);
+  }
+
+  .orbit-middle {
+    stroke: rgba(68, 123, 118, 0.26);
+  }
+
+  .orbit-inner {
+    stroke: rgba(232, 139, 115, 0.34);
+  }
+
+  .orbit-pencil {
+    display: none;
+  }
+
+  .journal-starfield .garden-bubble-orb {
+    width: clamp(110px, calc(var(--bubble-size) * 0.7), 174px);
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(1) {
+    left: 7%;
+    top: 15%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(2) {
+    right: 7%;
+    top: 36%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(3) {
+    left: 24%;
+    top: 59%;
+  }
+
+  .bubble-layer .garden-bubble-orb:nth-child(n + 4) {
+    right: 9%;
+    top: 65%;
+  }
+
+  .journal-starfield .garden-title {
+    top: 43%;
+    width: 72%;
+    font-size: clamp(13px, calc(var(--bubble-size) / 14), 18px);
+    line-height: 1.18;
+  }
+
+  .bubble-people {
+    top: 55%;
+  }
+
+  .journal-starfield .garden-date {
+    bottom: 17%;
+    max-width: 74%;
+    padding: 3px 7px;
+    font-size: 10.5px;
+  }
+
+  .journal-starfield .garden-bubble-orb.light .bubble-people {
+    display: none;
+  }
+
+  .journal-starfield .garden-bubble-orb.light .garden-date {
+    bottom: 24%;
+    background: transparent;
+    border: 0;
+    color: rgba(31, 56, 56, 0.72);
+  }
+
+  .journal-starfield .garden-bubble-orb.light .task-bubble-core {
+    width: 14px;
+    height: 14px;
+  }
+
+  .mobile-galaxy-tip {
+    position: absolute;
+    left: 18px;
+    right: auto;
+    bottom: 86px;
+    z-index: 5;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: rgba(31, 56, 56, 0.5);
+    font-size: 12px;
+    text-align: left;
+  }
+
+  .new-bubble-cta {
+    right: 20px;
+    bottom: 86px;
+    z-index: 76;
+  }
+}

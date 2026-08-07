@@ -24,6 +24,10 @@ function getBubbleSize(task) {
   return Math.max(132, Math.min(232, Math.round(size)));
 }
 
+function getBubbleTitle(title) {
+  return title?.replace(/^一起/, "").trim() || "新的泡泡";
+}
+
 export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, activeUser }) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
@@ -33,6 +37,7 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
   const weightTone = task.priority_weight >= 80 ? "heavy" : task.priority_weight >= 55 ? "medium" : "light";
   const participants = getParticipants(task);
   const bubbleSize = getBubbleSize(task);
+  const bubbleTitle = getBubbleTitle(task.title);
 
   async function popComplete() {
     setBusy(true);
@@ -105,7 +110,7 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
       <span className="bubble-glass"></span>
       <span className="bubble-sheen"></span>
       <span className="task-bubble-core"></span>
-      <span className="garden-title">{task.title}</span>
+      <span className="garden-title">{bubbleTitle}</span>
       <span className="bubble-people" aria-hidden="true">
         {participants.slice(0, 2).map((name, personIndex) => (
           <span key={`${name}-${personIndex}`} className={`mini-person avatar-${personIndex + 1}`}>
