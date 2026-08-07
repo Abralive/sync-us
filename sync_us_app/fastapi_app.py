@@ -50,6 +50,26 @@ def create_app() -> FastAPI:
     def get_couple(couple_id: int):
         return call_service(lambda: services.get_couple(couple_id))
 
+    @app.get("/api/v1/couples/{couple_id}/manual")
+    def list_manual(couple_id: int, user_id: int, subject_user_id: int | None = None, include_pending: bool = True):
+        return call_service(lambda: services.list_manual_entries(couple_id, user_id, subject_user_id, include_pending))
+
+    @app.post("/api/v1/couples/{couple_id}/manual")
+    def save_manual(couple_id: int, payload: dict):
+        return call_service(lambda: services.upsert_manual_entry(couple_id, payload.get("user_id"), payload))
+
+    @app.post("/api/v1/couples/{couple_id}/manual/query")
+    def query_manual(couple_id: int, payload: dict):
+        return call_service(lambda: services.query_manual(couple_id, payload.get("user_id"), payload.get("query", "")))
+
+    @app.post("/api/v1/manual/{entry_id}/confirm")
+    def confirm_manual(entry_id: int, payload: dict):
+        return call_service(lambda: services.confirm_manual_entry(entry_id, payload.get("user_id")))
+
+    @app.get("/api/v1/couples/{couple_id}/footprints")
+    def list_footprints(couple_id: int, user_id: int):
+        return call_service(lambda: services.list_footprints(couple_id, user_id))
+
     @app.get("/api/v1/couples/user/{user_id}")
     def get_user_couple(user_id: int):
         return call_service(lambda: services.get_user_couple(user_id))
@@ -78,6 +98,14 @@ def create_app() -> FastAPI:
     def delete_task(task_id: int):
         return call_service(lambda: services.delete_task(task_id))
 
+    @app.post("/api/v1/tasks/{task_id}/complete")
+    def complete_task(task_id: int, payload: dict):
+        return call_service(lambda: services.complete_task(task_id, payload.get("user_id")))
+
+    @app.post("/api/v1/tasks/{task_id}/footprint")
+    def save_task_footprint(task_id: int, payload: dict):
+        return call_service(lambda: services.save_task_footprint(task_id, payload.get("user_id"), payload))
+
     @app.get("/api/v1/stats")
     def get_stats(couple_id: int = 1):
         return services.get_stats(couple_id)
@@ -98,6 +126,8 @@ def call_service(callback):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except services.ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except services.ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 app = create_app()

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
 import { CalendarDays, Check, ListFilter, Search, SlidersHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
 import { request } from "../api/client.js";
 import { formatDateTime } from "../utils/date.js";
+import CompletionRecordModal from "./CompletionRecordModal.jsx";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -37,6 +38,7 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
   const [scope, setScope] = useState("all");
   const [sort, setSort] = useState("due");
   const [busyId, setBusyId] = useState(null);
+  const [completionPromptTask, setCompletionPromptTask] = useState(null);
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
 
@@ -63,13 +65,14 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
     return due > endOfToday && isWithinDays(due, today, 7);
   });
 
-  async function complete(taskId) {
-    setBusyId(taskId);
+  async function complete(task) {
+    setBusyId(task.id);
     try {
-      await request(`/tasks/${taskId}/complete`, {
+      const completedTask = await request(`/tasks/${task.id}/complete`, {
         method: "POST",
         body: JSON.stringify({ user_id: activeUser }),
       });
+      if (!task.is_private) setCompletionPromptTask(completedTask || task);
       onRefresh();
     } catch (err) {
       alert(err.message);
@@ -87,7 +90,7 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
         </button>
       </div>
 
-      <div className="agenda-date-strip" aria-label="一週日期">
+      <div className="agenda-date-strip" aria-label="一週泡泡日期">
         {weekDays.map((date) => {
           const dayTasks = tasks.filter((task) => isSameDay(new Date(task.due_time), date));
           return (
@@ -109,7 +112,7 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋泡泡..." />
         </label>
-        <div className="agenda-mode-switch" aria-label="清單或日曆">
+        <div className="agenda-mode-switch" aria-label="泡泡檢視模式">
           <button type="button" className={mode === "list" ? "active" : ""} onClick={() => setMode("list")}>
             <ListFilter size={18} />
             清單
@@ -135,7 +138,7 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
             排序
             <select value={sort} onChange={(event) => setSort(event.target.value)}>
               <option value="due">時間優先</option>
-              <option value="weight">重要度優先</option>
+              <option value="weight">壓力優先</option>
             </select>
           </label>
         </div>
@@ -147,7 +150,7 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
         <div className="agenda-list">
           <div className="agenda-section-head">
             <h3>今天 <span>{todayTasks.length}</span></h3>
-            <p>越大的泡泡，越需要先照顧</p>
+            <p>越大的泡泡，越需要先照顧。</p>
           </div>
           <AgendaGroup tasks={todayTasks} busyId={busyId} onComplete={complete} emptyText="今天沒有泡泡。" />
 
@@ -164,6 +167,13 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
         <SlidersHorizontal size={19} />
         篩選
       </button>
+
+      <CompletionRecordModal
+        task={completionPromptTask}
+        activeUser={activeUser}
+        onClose={() => setCompletionPromptTask(null)}
+        onSaved={onRefresh}
+      />
     </section>
   );
 }
@@ -182,7 +192,7 @@ function AgendaGroup({ tasks, busyId, onComplete, emptyText }) {
             <strong>{task.title}</strong>
             <small>{formatDateTime(task.due_time)}</small>
           </div>
-          <div className="agenda-people" aria-label="負責者">
+          <div className="agenda-people" aria-label="參與者">
             <span>{personInitial(task)}</span>
             {!task.is_private && <span>雙</span>}
           </div>
@@ -190,7 +200,7 @@ function AgendaGroup({ tasks, busyId, onComplete, emptyText }) {
             className="agenda-check"
             type="button"
             disabled={busyId === task.id}
-            onClick={() => onComplete(task.id)}
+            onClick={() => onComplete(task)}
             aria-label={`完成 ${task.title}`}
           >
             <Check size={18} />

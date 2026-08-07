@@ -83,6 +83,19 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path.startswith("/api/v1/users/"):
             self.call_json(lambda: services.get_user(path_id(parsed.path)))
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual"):
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(
+                lambda: services.list_manual_entries(
+                    couple_id,
+                    parse_required_int(query, "user_id"),
+                    subject_user_id=parse_optional_int(query, "subject_user_id"),
+                    include_pending=query.get("include_pending", ["1"])[0] != "0",
+                )
+            )
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/footprints"):
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(lambda: services.list_footprints(couple_id, parse_required_int(query, "user_id")))
         elif parsed.path.startswith("/api/v1/couples/user/"):
             self.call_json(lambda: services.get_user_couple(path_id(parsed.path)))
         elif parsed.path.startswith("/api/v1/couples/"):
@@ -102,6 +115,20 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.call_json(lambda: services.create_user(self.read_json()), 201)
         elif parsed.path == "/api/v1/couples":
             self.call_json(lambda: services.create_couple(self.read_json()), 201)
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual/query"):
+            body = self.read_json()
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(lambda: services.query_manual(couple_id, body.get("user_id"), body.get("query", "")))
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual"):
+            body = self.read_json()
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(lambda: services.upsert_manual_entry(couple_id, body.get("user_id"), body), 201)
+        elif parsed.path.startswith("/api/v1/manual/") and parsed.path.endswith("/confirm"):
+            body = self.read_json()
+            self.call_json(lambda: services.confirm_manual_entry(action_id(parsed.path), body.get("user_id")))
+        elif parsed.path.startswith("/api/v1/tasks/") and parsed.path.endswith("/footprint"):
+            body = self.read_json()
+            self.call_json(lambda: services.save_task_footprint(action_id(parsed.path), body.get("user_id"), body))
         elif parsed.path.startswith("/api/v1/tasks/") and parsed.path.endswith("/complete"):
             body = self.read_json()
             self.call_json(lambda: services.complete_task(action_id(parsed.path), body.get("user_id")))
@@ -180,6 +207,13 @@ def parse_optional_int(query: dict, key: str) -> int | None:
     return int(value) if value not in (None, "") else None
 
 
+def parse_required_int(query: dict, key: str) -> int:
+    value = parse_optional_int(query, key)
+    if value is None:
+        raise ValueError(f"{key} is required")
+    return value
+
+
 def path_id(path: str) -> int:
     return int(path.rstrip("/").rsplit("/", 1)[-1])
 
@@ -187,6 +221,10 @@ def path_id(path: str) -> int:
 def action_id(path: str) -> int:
     # /api/v1/tasks/{id}/complete -> {id}
     return int(path.rstrip("/").split("/")[-2])
+
+
+def segment_id(path: str, index: int) -> int:
+    return int(path.rstrip("/").split("/")[index])
 
 
 def run(host: str = "127.0.0.1", port: int = 8000):

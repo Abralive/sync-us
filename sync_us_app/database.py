@@ -86,6 +86,53 @@ def init_db() -> None:
                 FOREIGN KEY(assigned_to_id) REFERENCES users(id),
                 FOREIGN KEY(matched_task_id) REFERENCES tasks(id)
             );
+
+            CREATE TABLE IF NOT EXISTS partner_manual_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                couple_id INTEGER NOT NULL,
+                subject_user_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                label TEXT NOT NULL,
+                value TEXT NOT NULL,
+                source_type TEXT NOT NULL DEFAULT 'manual',
+                source_label TEXT NOT NULL DEFAULT '共同手冊',
+                status TEXT NOT NULL DEFAULT 'confirmed',
+                created_by_id INTEGER NOT NULL,
+                updated_by_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(couple_id) REFERENCES couples(id),
+                FOREIGN KEY(subject_user_id) REFERENCES users(id),
+                FOREIGN KEY(created_by_id) REFERENCES users(id),
+                FOREIGN KEY(updated_by_id) REFERENCES users(id),
+                UNIQUE(couple_id, subject_user_id, category, label)
+            );
+
+            CREATE TABLE IF NOT EXISTS shared_footprints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                couple_id INTEGER NOT NULL,
+                bubble_id INTEGER NOT NULL UNIQUE,
+                task_title TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                participants TEXT NOT NULL DEFAULT '[]',
+                photo_data_url TEXT,
+                note TEXT,
+                created_by_id INTEGER NOT NULL,
+                updated_by_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                original_task_json TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY(couple_id) REFERENCES couples(id),
+                FOREIGN KEY(bubble_id) REFERENCES tasks(id),
+                FOREIGN KEY(created_by_id) REFERENCES users(id),
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_manual_couple_subject
+                ON partner_manual_entries(couple_id, subject_user_id, status);
+
+            CREATE INDEX IF NOT EXISTS idx_footprints_couple_completed
+                ON shared_footprints(couple_id, completed_at DESC);
             """
         )
         ensure_task_columns(conn)

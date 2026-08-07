@@ -11,7 +11,7 @@ function getInitial(name) {
 
 function getParticipants(task) {
   if (!task.is_private && !task.assigned_to_name) {
-    return [task.created_by_name || "Mina", "Kai"];
+    return [task.created_by_name || "Sync", "共同"];
   }
   return [task.assigned_to_name || task.created_by_name || "Sync"];
 }
@@ -28,7 +28,7 @@ function getBubbleTitle(title) {
   return title?.replace(/^一起/, "").trim() || "新的泡泡";
 }
 
-export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, activeUser }) {
+export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, activeUser, onCompleted }) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -42,10 +42,11 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
   async function popComplete() {
     setBusy(true);
     try {
-      await request(`/tasks/${task.id}/complete`, {
+      const completedTask = await request(`/tasks/${task.id}/complete`, {
         method: "POST",
         body: JSON.stringify({ user_id: activeUser }),
       });
+      if (!task.is_private) onCompleted?.(completedTask || task);
     } finally {
       setBusy(false);
       onRefresh();

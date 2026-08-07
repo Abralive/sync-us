@@ -10,7 +10,7 @@ AUTH_USER = os.environ.get("SYNC_US_USER", "")
 AUTH_PASSWORD = os.environ.get("SYNC_US_PASS", "")
 AUTH_ENABLED = bool(AUTH_USER and AUTH_PASSWORD)
 
-DB_PATH = BASE_DIR / "sync_us.db"
+DB_PATH = Path(os.environ.get("SYNC_US_DB", BASE_DIR / "sync_us.db"))
 INDEX_PATH = BASE_DIR / "index.html"
 FRONTEND_DIR = BASE_DIR / "frontend"
 FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"

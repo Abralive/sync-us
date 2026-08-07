@@ -1,5 +1,6 @@
 import { CalendarDays, Heart, MessageCircle, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
+import CompletionRecordModal from "./CompletionRecordModal.jsx";
 import TaskCard from "./TaskCard.jsx";
 import { countdownText, formatDateTime } from "../utils/date.js";
 
@@ -42,6 +43,7 @@ export default function BubbleGarden({
   hasCouple,
 }) {
   const [selectedTask, setSelectedTask] = useState(null);
+  const [completionPromptTask, setCompletionPromptTask] = useState(null);
   const [scope, setScope] = useState("shared");
   const visibleTasks = tasks.filter((task) => !task.is_completed);
   const sharedTasks = visibleTasks.filter((task) => !task.is_private);
@@ -181,6 +183,7 @@ export default function BubbleGarden({
                     task={task}
                     activeUser={activeUser}
                     onRefresh={onRefresh}
+                    onCompleted={(completedTask) => setCompletionPromptTask(completedTask)}
                     variant="garden"
                     index={index}
                     onOpenDetails={() => setSelectedTask(task)}
@@ -270,6 +273,13 @@ export default function BubbleGarden({
           </div>
         </div>
       )}
+
+      <CompletionRecordModal
+        task={completionPromptTask}
+        activeUser={activeUser}
+        onClose={() => setCompletionPromptTask(null)}
+        onSaved={onRefresh}
+      />
     </section>
   );
 }
