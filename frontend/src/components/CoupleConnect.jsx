@@ -314,6 +314,7 @@ function ManualPanel({
   saveManualEntry,
   confirmEntry,
 }) {
+  const [draftCategory, setDraftCategory] = useState("health");
   const grouped = CATEGORY_ORDER.map(([key, label]) => ({
     key,
     label,
@@ -336,14 +337,23 @@ function ManualPanel({
       {manualFormOpen && (
         <form className="manual-entry-form" onSubmit={saveManualEntry}>
           <input type="hidden" name="subject_user_id" value={partner?.id || ""} />
-          <label>
-            分類
-            <select name="category" defaultValue="health">
+          <input type="hidden" name="category" value={draftCategory} />
+          <fieldset className="manual-category-picker">
+            <legend>分類</legend>
+            <div>
               {CATEGORY_ORDER.map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
+                <button
+                  key={key}
+                  type="button"
+                  className={draftCategory === key ? "active" : ""}
+                  onClick={() => setDraftCategory(key)}
+                  aria-pressed={draftCategory === key}
+                >
+                  {label}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </fieldset>
           <label>
             標籤
             <input name="label" maxLength={40} placeholder="例如：過敏" required />
