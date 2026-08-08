@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 import sqlite3
 
 from .config import DB_PATH
@@ -136,7 +137,8 @@ def init_db() -> None:
             """
         )
         ensure_task_columns(conn)
-        seed_data(conn)
+        if os.environ.get("SYNC_US_SEED", "0") == "1":
+            seed_data(conn)
 
 
 def ensure_task_columns(conn: sqlite3.Connection) -> None:

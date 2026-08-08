@@ -162,7 +162,13 @@ export default function App() {
             </div>
           )}
           {error && <div className="error">{error}</div>}
-          <TaskBoard tasks={tasks} activeUser={activeUser} onRefresh={refresh} onAddTask={() => setIsTaskSheetOpen(true)} />
+          <TaskBoard
+            tasks={tasks}
+            activeUser={activeUser}
+            onRefresh={refresh}
+            onAddTask={() => setIsTaskSheetOpen(true)}
+            onGoHome={() => setActiveTab("home")}
+          />
         </section>
       )}
 

@@ -19,6 +19,18 @@ def main():
             now = utc_now()
             conn.execute(
                 "INSERT INTO users (username, email, created_at) VALUES (?, ?, ?)",
+                ("Mina", "mina@sync-us.local", now),
+            )
+            conn.execute(
+                "INSERT INTO users (username, email, created_at) VALUES (?, ?, ?)",
+                ("Kai", "kai@sync-us.local", now),
+            )
+            conn.execute(
+                "INSERT INTO couples (partner_a_id, partner_b_id, status, created_at) VALUES (1, 2, 'active', ?)",
+                (now,),
+            )
+            conn.execute(
+                "INSERT INTO users (username, email, created_at) VALUES (?, ?, ?)",
                 ("Outside", "outside@sync-us.local", now),
             )
             due = (utc_now_dt() - timedelta(hours=1)).isoformat()

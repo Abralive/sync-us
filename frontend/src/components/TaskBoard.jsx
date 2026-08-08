@@ -1,8 +1,6 @@
-import { CalendarDays, Check, ListFilter, Search, SlidersHorizontal } from "lucide-react";
+import { CalendarDays, ListFilter, Orbit, Search, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { request } from "../api/client.js";
 import { formatDateTime } from "../utils/date.js";
-import CompletionRecordModal from "./CompletionRecordModal.jsx";
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -31,14 +29,12 @@ function personInitial(task) {
   return task.assigned_to_name?.slice(0, 1) || task.created_by_name?.slice(0, 1) || "雙";
 }
 
-export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
+export default function TaskBoard({ tasks, activeUser, onAddTask, onGoHome }) {
   const [mode, setMode] = useState("list");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [scope, setScope] = useState("all");
   const [sort, setSort] = useState("due");
-  const [busyId, setBusyId] = useState(null);
-  const [completionPromptTask, setCompletionPromptTask] = useState(null);
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
 
@@ -64,22 +60,6 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
     const due = new Date(task.due_time);
     return due > endOfToday && isWithinDays(due, today, 7);
   });
-
-  async function complete(task) {
-    setBusyId(task.id);
-    try {
-      const completedTask = await request(`/tasks/${task.id}/complete`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: activeUser }),
-      });
-      if (!task.is_private) setCompletionPromptTask(completedTask || task);
-      onRefresh();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <section className="bubble-agenda-page">
@@ -152,14 +132,14 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
             <h3>今天 <span>{todayTasks.length}</span></h3>
             <p>越大的泡泡，越需要先照顧。</p>
           </div>
-          <AgendaGroup tasks={todayTasks} busyId={busyId} onComplete={complete} emptyText="今天沒有泡泡。" />
+          <AgendaGroup tasks={todayTasks} onGoHome={onGoHome} emptyText="今天沒有泡泡。" />
 
           <div className="agenda-divider"></div>
 
           <div className="agenda-section-head">
             <h3>本週 <span>{weekTasks.length}</span></h3>
           </div>
-          <AgendaGroup tasks={weekTasks} busyId={busyId} onComplete={complete} emptyText="本週暫時很安靜。" />
+          <AgendaGroup tasks={weekTasks} onGoHome={onGoHome} emptyText="本週暫時很安靜。" />
         </div>
       )}
 
@@ -168,17 +148,11 @@ export default function TaskBoard({ tasks, activeUser, onRefresh, onAddTask }) {
         篩選
       </button>
 
-      <CompletionRecordModal
-        task={completionPromptTask}
-        activeUser={activeUser}
-        onClose={() => setCompletionPromptTask(null)}
-        onSaved={onRefresh}
-      />
     </section>
   );
 }
 
-function AgendaGroup({ tasks, busyId, onComplete, emptyText }) {
+function AgendaGroup({ tasks, onGoHome, emptyText }) {
   if (tasks.length === 0) {
     return <p className="agenda-empty">{emptyText}</p>;
   }
@@ -196,14 +170,9 @@ function AgendaGroup({ tasks, busyId, onComplete, emptyText }) {
             <span>{personInitial(task)}</span>
             {!task.is_private && <span>雙</span>}
           </div>
-          <button
-            className="agenda-check"
-            type="button"
-            disabled={busyId === task.id}
-            onClick={() => onComplete(task)}
-            aria-label={`完成 ${task.title}`}
-          >
-            <Check size={18} />
+          <button className="agenda-orbit-link" type="button" onClick={onGoHome} aria-label={`到星域戳破 ${task.title}`}>
+            <Orbit size={18} />
+            <span>去星域</span>
           </button>
         </article>
       ))}

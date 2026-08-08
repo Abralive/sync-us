@@ -4,7 +4,7 @@ import { request } from "../api/client.js";
 
 export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
   const [mode, setMode] = useState("login");
-  const [email, setEmail] = useState("mina@sync-us.local");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -71,7 +71,7 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
           )}
           <label>
             Email
-            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="mina@sync-us.local" required />
+            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required />
           </label>
           {error && <div className="error">{error}</div>}
           <button className="btn primary auth-submit" disabled={loading}>
@@ -81,7 +81,11 @@ export default function AuthScreen({ users, onAuthenticated, onUsersChanged }) {
         </form>
 
         <div className="auth-hint">
-          測試帳號可用 <strong>mina@sync-us.local</strong> 或 <strong>kai@sync-us.local</strong>
+          {users.length === 0 ? (
+            <>第一次使用請先註冊你的帳號，再讓伴侶註冊並建立連結。</>
+          ) : (
+            <>已經有帳號時，輸入註冊 Email 就能回到星域。</>
+          )}
         </div>
       </section>
     </main>

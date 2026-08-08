@@ -5612,20 +5612,28 @@ body {
   background: rgba(242, 185, 173, 0.42);
 }
 
-.agenda-check {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border: 2px solid rgba(31, 56, 56, 0.42);
-  border-radius: 50%;
-  background: transparent;
-  color: transparent;
+.agenda-orbit-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 82px;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid rgba(31, 56, 56, 0.13);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.92);
+  color: var(--journal-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
-.agenda-check:focus-visible,
-.agenda-check:hover {
-  color: var(--journal-ink);
+.agenda-orbit-link:focus-visible,
+.agenda-orbit-link:hover {
+  border-color: rgba(117, 171, 164, 0.74);
+  background: rgba(232, 244, 239, 0.95);
 }
 
 .agenda-divider {
