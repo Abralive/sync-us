@@ -46,6 +46,26 @@ def create_app() -> FastAPI:
     def create_couple(couple: CoupleCreate):
         return call_service(lambda: services.create_couple(model_to_dict(couple)))
 
+    @app.post("/api/v1/couple-invites")
+    def create_couple_invite(payload: dict):
+        return call_service(lambda: services.create_couple_invite(payload))
+
+    @app.get("/api/v1/couple-invites/user/{user_id}")
+    def list_couple_invites(user_id: int):
+        return call_service(lambda: services.list_couple_invites_for_user(user_id))
+
+    @app.get("/api/v1/couple-invites/code/{invite_code}")
+    def get_couple_invite(invite_code: str):
+        return call_service(lambda: services.get_couple_invite_by_code(invite_code))
+
+    @app.post("/api/v1/couple-invites/{invite_code}/accept")
+    def accept_couple_invite(invite_code: str, payload: dict):
+        return call_service(lambda: services.accept_couple_invite(invite_code, payload))
+
+    @app.post("/api/v1/couple-invites/{invite_code}/decline")
+    def decline_couple_invite(invite_code: str, payload: dict):
+        return call_service(lambda: services.decline_couple_invite(invite_code, payload))
+
     @app.get("/api/v1/couples/{couple_id}")
     def get_couple(couple_id: int):
         return call_service(lambda: services.get_couple(couple_id))

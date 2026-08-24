@@ -10,13 +10,20 @@ function addDays(date, days) {
   return next;
 }
 
-function isSameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function startOfDay(date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
 }
 
-function isWithinDays(date, start, days) {
-  const end = addDays(start, days);
-  return date >= start && date < end;
+function startOfWeek(date) {
+  const next = startOfDay(date);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+
+function isSameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 function bubbleTone(weight) {
@@ -26,17 +33,26 @@ function bubbleTone(weight) {
 }
 
 function personInitial(task) {
-  return task.assigned_to_name?.slice(0, 1) || task.created_by_name?.slice(0, 1) || "雙";
+  return task.assigned_to_name?.slice(0, 1) || task.created_by_name?.slice(0, 1) || "?";
 }
 
-export default function TaskBoard({ tasks, activeUser, onAddTask, onGoHome }) {
+export default function TaskBoard({
+  tasks,
+  selectedDate,
+  onSelectedDateChange,
+  onAddTask,
+  onGoHome,
+}) {
   const [mode, setMode] = useState("list");
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [scope, setScope] = useState("all");
   const [sort, setSort] = useState("due");
-  const today = new Date();
-  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
+
+  const anchorDate = startOfDay(selectedDate || new Date());
+  const weekStart = startOfWeek(anchorDate);
+  const weekEnd = addDays(weekStart, 6);
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -53,28 +69,34 @@ export default function TaskBoard({ tasks, activeUser, onAddTask, onGoHome }) {
       });
   }, [tasks, query, scope, sort]);
 
-  const endOfToday = new Date(today);
-  endOfToday.setHours(23, 59, 59, 999);
-  const todayTasks = filtered.filter((task) => new Date(task.due_time) <= endOfToday);
-  const weekTasks = filtered.filter((task) => {
-    const due = new Date(task.due_time);
-    return due > endOfToday && isWithinDays(due, today, 7);
+  const selectedTasks = filtered.filter((task) => isSameDay(new Date(task.due_time), anchorDate));
+  const upcomingTasks = filtered.filter((task) => {
+    const due = startOfDay(new Date(task.due_time));
+    return due >= weekStart && due <= weekEnd && !isSameDay(due, anchorDate);
   });
 
   return (
     <section className="bubble-agenda-page">
       <div className="bubble-agenda-title">
-        <h2>泡泡管理</h2>
+        <div>
+          <span>泡泡</span>
+          <h2>泡泡管理</h2>
+        </div>
         <button className="agenda-add-button" type="button" onClick={onAddTask} aria-label="新增泡泡">
           +
         </button>
       </div>
 
-      <div className="agenda-date-strip" aria-label="一週泡泡日期">
+      <div className="agenda-date-strip" aria-label="一週日期">
         {weekDays.map((date) => {
           const dayTasks = tasks.filter((task) => isSameDay(new Date(task.due_time), date));
           return (
-            <button key={date.toISOString()} className={isSameDay(date, today) ? "active" : ""} type="button">
+            <button
+              key={date.toISOString()}
+              className={isSameDay(date, anchorDate) ? "active" : ""}
+              type="button"
+              onClick={() => onSelectedDateChange(date)}
+            >
               <strong>{date.getDate()}</strong>
               <span>週{WEEKDAYS[date.getDay()]}</span>
               <i>
@@ -92,54 +114,66 @@ export default function TaskBoard({ tasks, activeUser, onAddTask, onGoHome }) {
           <Search size={21} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋泡泡..." />
         </label>
-        <div className="agenda-mode-switch" aria-label="泡泡檢視模式">
+        <div className="agenda-mode-switch" aria-label="顯示模式">
           <button type="button" className={mode === "list" ? "active" : ""} onClick={() => setMode("list")}>
             <ListFilter size={18} />
             清單
           </button>
           <button type="button" className={mode === "calendar" ? "active" : ""} onClick={() => setMode("calendar")}>
             <CalendarDays size={18} />
-            日曆
+            月曆
           </button>
         </div>
       </div>
 
       {showFilters && (
         <div className="agenda-filter-drawer">
-          <label>
-            範圍
-            <select value={scope} onChange={(event) => setScope(event.target.value)}>
-              <option value="all">全部</option>
-              <option value="shared">共享</option>
-              <option value="private">私人</option>
-            </select>
-          </label>
-          <label>
-            排序
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="due">時間優先</option>
-              <option value="weight">壓力優先</option>
-            </select>
-          </label>
+          <fieldset>
+            <legend>範圍</legend>
+            <div className="filter-pill-row">
+              {[
+                ["all", "全部"],
+                ["shared", "共享"],
+                ["private", "私人"],
+              ].map(([value, label]) => (
+                <button key={value} type="button" className={scope === value ? "active" : ""} onClick={() => setScope(value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>排序</legend>
+            <div className="filter-pill-row">
+              {[
+                ["due", "時間"],
+                ["weight", "重要度"],
+              ].map(([value, label]) => (
+                <button key={value} type="button" className={sort === value ? "active" : ""} onClick={() => setSort(value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
         </div>
       )}
 
       {mode === "calendar" ? (
-        <AgendaCalendar tasks={filtered} />
+        <AgendaCalendar tasks={filtered} selectedDate={anchorDate} onSelectedDateChange={onSelectedDateChange} />
       ) : (
         <div className="agenda-list">
           <div className="agenda-section-head">
-            <h3>今天 <span>{todayTasks.length}</span></h3>
-            <p>越大的泡泡，越需要先照顧。</p>
+            <h3>選定日期 <span>{selectedTasks.length}</span></h3>
+            <p>這天需要被看見與安排的泡泡。</p>
           </div>
-          <AgendaGroup tasks={todayTasks} onGoHome={onGoHome} emptyText="今天沒有泡泡。" />
+          <AgendaGroup tasks={selectedTasks} onGoHome={onGoHome} emptyText="這一天目前沒有泡泡。" />
 
           <div className="agenda-divider"></div>
 
           <div className="agenda-section-head">
-            <h3>本週 <span>{weekTasks.length}</span></h3>
+            <h3>接下來 <span>{upcomingTasks.length}</span></h3>
           </div>
-          <AgendaGroup tasks={weekTasks} onGoHome={onGoHome} emptyText="本週暫時很安靜。" />
+          <AgendaGroup tasks={upcomingTasks} onGoHome={onGoHome} emptyText="接下來一週沒有其他泡泡。" />
         </div>
       )}
 
@@ -147,7 +181,6 @@ export default function TaskBoard({ tasks, activeUser, onAddTask, onGoHome }) {
         <SlidersHorizontal size={19} />
         篩選
       </button>
-
     </section>
   );
 }
@@ -168,9 +201,9 @@ function AgendaGroup({ tasks, onGoHome, emptyText }) {
           </div>
           <div className="agenda-people" aria-label="參與者">
             <span>{personInitial(task)}</span>
-            {!task.is_private && <span>雙</span>}
+            {!task.is_private && <span>共</span>}
           </div>
-          <button className="agenda-orbit-link" type="button" onClick={onGoHome} aria-label={`到星域戳破 ${task.title}`}>
+          <button className="agenda-orbit-link" type="button" onClick={onGoHome} aria-label={`回星域查看 ${task.title}`}>
             <Orbit size={18} />
             <span>去星域</span>
           </button>
@@ -180,10 +213,9 @@ function AgendaGroup({ tasks, onGoHome, emptyText }) {
   );
 }
 
-function AgendaCalendar({ tasks }) {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+function AgendaCalendar({ tasks, selectedDate, onSelectedDateChange }) {
+  const year = selectedDate.getFullYear();
+  const month = selectedDate.getMonth();
   const first = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells = [];
@@ -199,13 +231,20 @@ function AgendaCalendar({ tasks }) {
       <div className="agenda-calendar-grid">
         {cells.map((date, index) => {
           const dayTasks = date ? tasks.filter((task) => isSameDay(new Date(task.due_time), date)) : [];
+          const active = date && isSameDay(date, selectedDate);
           return (
-            <div key={date?.toISOString() || `blank-${index}`} className={date ? "agenda-calendar-cell" : "agenda-calendar-cell blank"}>
+            <button
+              key={date?.toISOString() || `blank-${index}`}
+              className={date ? `agenda-calendar-cell ${active ? "active" : ""}` : "agenda-calendar-cell blank"}
+              type="button"
+              disabled={!date}
+              onClick={() => date && onSelectedDateChange(date)}
+            >
               {date && <span>{date.getDate()}</span>}
               <i>
                 {dayTasks.slice(0, 3).map((task) => <em key={task.id} className={bubbleTone(task.priority_weight)}></em>)}
               </i>
-            </div>
+            </button>
           );
         })}
       </div>

@@ -81,7 +81,11 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.call_json(routes[parsed.path])
             return
 
-        if parsed.path.startswith("/api/v1/users/"):
+        if parsed.path.startswith("/api/v1/couple-invites/user/"):
+            self.call_json(lambda: services.list_couple_invites_for_user(path_id(parsed.path)))
+        elif parsed.path.startswith("/api/v1/couple-invites/code/"):
+            self.call_json(lambda: services.get_couple_invite_by_code(path_text(parsed.path)))
+        elif parsed.path.startswith("/api/v1/users/"):
             self.call_json(lambda: services.get_user(path_id(parsed.path)))
         elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual"):
             couple_id = segment_id(parsed.path, 4)
@@ -115,6 +119,14 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.call_json(lambda: services.create_user(self.read_json()), 201)
         elif parsed.path == "/api/v1/couples":
             self.call_json(lambda: services.create_couple(self.read_json()), 201)
+        elif parsed.path == "/api/v1/couple-invites":
+            self.call_json(lambda: services.create_couple_invite(self.read_json()), 201)
+        elif parsed.path.startswith("/api/v1/couple-invites/") and parsed.path.endswith("/accept"):
+            body = self.read_json()
+            self.call_json(lambda: services.accept_couple_invite(action_text(parsed.path), body))
+        elif parsed.path.startswith("/api/v1/couple-invites/") and parsed.path.endswith("/decline"):
+            body = self.read_json()
+            self.call_json(lambda: services.decline_couple_invite(action_text(parsed.path), body))
         elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual/query"):
             body = self.read_json()
             couple_id = segment_id(parsed.path, 4)
@@ -221,6 +233,14 @@ def path_id(path: str) -> int:
 def action_id(path: str) -> int:
     # /api/v1/tasks/{id}/complete -> {id}
     return int(path.rstrip("/").split("/")[-2])
+
+
+def action_text(path: str) -> str:
+    return path.rstrip("/").split("/")[-2]
+
+
+def path_text(path: str) -> str:
+    return path.rstrip("/").rsplit("/", 1)[-1]
 
 
 def segment_id(path: str, index: int) -> int:

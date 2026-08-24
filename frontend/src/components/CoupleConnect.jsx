@@ -45,6 +45,7 @@ export default function CoupleConnect({
   activeUser,
   couple,
   completed = [],
+  onRefresh,
   onConnected,
 }) {
   const [selectedPartner, setSelectedPartner] = useState("");
@@ -58,6 +59,10 @@ export default function CoupleConnect({
   const [manualFormOpen, setManualFormOpen] = useState(false);
   const [footprintDetail, setFootprintDetail] = useState(null);
   const [loadState, setLoadState] = useState("idle");
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
+  const [pendingInvites, setPendingInvites] = useState([]);
 
   const activeUserData = useMemo(
     () => users.find((user) => user.id === Number(activeUser)),
@@ -77,6 +82,11 @@ export default function CoupleConnect({
   useEffect(() => {
     if (!couple) return;
     loadConnectionData();
+  }, [couple?.id, activeUser]);
+
+  useEffect(() => {
+    if (couple || !activeUser) return;
+    loadInvites();
   }, [couple?.id, activeUser]);
 
   async function loadConnectionData() {
@@ -121,6 +131,103 @@ export default function CoupleConnect({
     }
   }
 
+  async function loadInvites() {
+    try {
+      const result = await request(`/couple-invites/user/${activeUser}`);
+      setPendingInvites(result.sent_or_received || []);
+    } catch {
+      setPendingInvites([]);
+    }
+  }
+
+  async function createInvite(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setInviteStatus("");
+    try {
+      const invite = await request("/couple-invites", {
+        method: "POST",
+        body: JSON.stringify({
+          inviter_id: Number(activeUser),
+          invitee_email: "",
+        }),
+      });
+      setInviteCode(invite.invite_code);
+      setInviteStatus("邀請碼已建立，請把它傳給對方。");
+      await loadInvites();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copyInviteCode() {
+    if (!inviteCode) return;
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setInviteStatus("邀請碼已複製。");
+    } catch {
+      setInviteStatus("無法自動複製，請手動複製邀請碼。");
+    }
+  }
+
+  async function acceptInvite(event) {
+    event.preventDefault();
+    if (!joinCode.trim()) {
+      setError("請輸入對方給你的邀請碼。");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setInviteStatus("");
+    try {
+      const created = await request(`/couple-invites/${joinCode.trim().toUpperCase()}/accept`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: Number(activeUser) }),
+      });
+      setInviteStatus("連結完成。");
+      await onConnected(created.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function acceptReceivedInvite(code) {
+    setLoading(true);
+    setError("");
+    try {
+      const created = await request(`/couple-invites/${code}/accept`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: Number(activeUser) }),
+      });
+      await onConnected(created.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function declineInvite(code) {
+    setLoading(true);
+    setError("");
+    try {
+      await request(`/couple-invites/${code}/decline`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: Number(activeUser) }),
+      });
+      await loadInvites();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function askSync(event) {
     event.preventDefault();
     if (!query.trim()) return;
@@ -155,6 +262,7 @@ export default function CoupleConnect({
       event.currentTarget.reset();
       setManualFormOpen(false);
       await loadConnectionData();
+      onRefresh?.();
     } catch (err) {
       setError(err.message);
     }
@@ -167,9 +275,112 @@ export default function CoupleConnect({
         body: JSON.stringify({ user_id: activeUser }),
       });
       await loadConnectionData();
+      onRefresh?.();
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  if (!couple) {
+    const sentInvites = pendingInvites.filter((invite) => invite.inviter_id === Number(activeUser) && invite.status === "pending");
+    const receivedInvites = pendingInvites.filter((invite) => invite.inviter_id !== Number(activeUser) && invite.status === "pending");
+    const visibleInviteCode = inviteCode || sentInvites[0]?.invite_code || "";
+
+    return (
+      <section className="manual-page no-pair">
+        <div className="manual-topline">
+          <span className="sync-logo-mini" aria-hidden="true"></span>
+          <strong>Sync-Us</strong>
+        </div>
+
+        <div className="manual-page-title">
+          <span>連結</span>
+          <h2>先把兩個人綁在同一個共享空間</h2>
+          <p>完成連結後，才會開啟共享星域、共同泡泡、共同足跡與對方的小手冊。</p>
+        </div>
+
+        <div className="pair-choice-grid">
+          <form className="pair-invite-panel" onSubmit={createInvite}>
+            <div>
+              <span className="manual-eyebrow">方法一</span>
+              <h3>產生邀請碼給對方</h3>
+              <p>不用先填對方 Email，把邀請碼傳給對方輸入就能連結。</p>
+            </div>
+            <button className="btn primary" disabled={loading} type="submit">
+              <Link2 size={18} />
+              {visibleInviteCode ? "重新顯示邀請碼" : "產生邀請碼"}
+            </button>
+            {visibleInviteCode && (
+              <div className="invite-code-card">
+                <span>你的邀請碼</span>
+                <strong>{visibleInviteCode}</strong>
+                <button type="button" onClick={copyInviteCode}>複製</button>
+              </div>
+            )}
+          </form>
+
+          <form className="pair-invite-panel" onSubmit={acceptInvite}>
+            <div>
+              <span className="manual-eyebrow">方法二</span>
+              <h3>輸入對方給你的邀請碼</h3>
+              <p>如果對方已經建立邀請，貼上代碼後你們會正式成為一組。</p>
+            </div>
+            <label>
+              邀請碼
+              <input
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value)}
+                placeholder="SYNC-XXXX"
+                inputMode="text"
+              />
+            </label>
+            <button className="btn primary" disabled={loading} type="submit">
+              <ShieldCheck size={18} />
+              接受連結
+            </button>
+          </form>
+        </div>
+
+        {receivedInvites.length > 0 && (
+          <section className="pair-pending-list">
+            <h3>收到的邀請</h3>
+            {receivedInvites.map((invite) => (
+              <article key={invite.id}>
+                <div>
+                  <strong>{invite.inviter_name || "對方"} 想和你建立 Sync-Us 連結</strong>
+                  <span>{invite.invite_code}</span>
+                </div>
+                <button type="button" onClick={() => acceptReceivedInvite(invite.invite_code)} disabled={loading}>接受</button>
+                <button type="button" onClick={() => declineInvite(invite.invite_code)} disabled={loading}>拒絕</button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {sentInvites.length > 0 && (
+          <section className="pair-pending-list muted">
+            <h3>等待對方接受</h3>
+            {sentInvites.map((invite) => (
+              <article key={invite.id}>
+                <div>
+                  <strong>{invite.invite_code}</strong>
+                  <span>{invite.invitee_email ? `已指定 ${invite.invitee_email}` : "任何登入者輸入此碼後可送出接受"}</span>
+                </div>
+                <button type="button" onClick={() => declineInvite(invite.invite_code)} disabled={loading}>取消</button>
+              </article>
+            ))}
+          </section>
+        )}
+
+        <div className="pair-privacy-note">
+          連結完成前不會共享私人泡泡、手冊資料或共同足跡。連結完成後，共享泡泡才會出現在你們兩個人的星域中。
+        </div>
+
+        {(error || inviteStatus) && (
+          <div className={error ? "manual-error" : "manual-success"}>{error || inviteStatus}</div>
+        )}
+      </section>
+    );
   }
 
   if (!couple) {

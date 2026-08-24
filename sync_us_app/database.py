@@ -62,8 +62,25 @@ def init_db() -> None:
                 partner_b_id INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT,
                 FOREIGN KEY(partner_a_id) REFERENCES users(id),
                 FOREIGN KEY(partner_b_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS couple_invites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inviter_id INTEGER NOT NULL,
+                invitee_email TEXT,
+                invite_code TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'pending',
+                expires_at TEXT NOT NULL,
+                accepted_by_id INTEGER,
+                couple_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(inviter_id) REFERENCES users(id),
+                FOREIGN KEY(accepted_by_id) REFERENCES users(id),
+                FOREIGN KEY(couple_id) REFERENCES couples(id)
             );
 
             CREATE TABLE IF NOT EXISTS tasks (
@@ -134,11 +151,21 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_footprints_couple_completed
                 ON shared_footprints(couple_id, completed_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_couple_invites_user_status
+                ON couple_invites(inviter_id, invitee_email, status);
             """
         )
+        ensure_couple_columns(conn)
         ensure_task_columns(conn)
         if os.environ.get("SYNC_US_SEED", "0") == "1":
             seed_data(conn)
+
+
+def ensure_couple_columns(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(couples)").fetchall()}
+    if "ended_at" not in existing:
+        conn.execute("ALTER TABLE couples ADD COLUMN ended_at TEXT")
 
 
 def ensure_task_columns(conn: sqlite3.Connection) -> None:

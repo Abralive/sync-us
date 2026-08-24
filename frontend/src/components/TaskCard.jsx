@@ -4,6 +4,7 @@ import { formatDateTime } from "../utils/date.js";
 import { playPop, unlockAudio } from "../utils/sound.js";
 
 const POP_HOLD_MS = 1100;
+const REWARD_ANIMATION_MS = 1450;
 
 function getInitial(name) {
   return name?.trim()?.slice(0, 1) || "?";
@@ -49,7 +50,10 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
       if (!task.is_private) onCompleted?.(completedTask || task);
     } finally {
       setBusy(false);
-      onRefresh();
+      window.setTimeout(() => {
+        setPopping(false);
+        onRefresh();
+      }, REWARD_ANIMATION_MS);
     }
   }
 
@@ -66,7 +70,6 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
       playPop();
       if (navigator.vibrate) navigator.vibrate([40, 30, 80]);
       popComplete();
-      window.setTimeout(() => setPopping(false), 850);
     }, POP_HOLD_MS);
   }
 
@@ -84,9 +87,14 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
   }
 
   const burst = popping && (
-    <span className="pop-burst" aria-hidden="true">
+    <span className="pop-burst reward-burst" aria-hidden="true">
       {Array.from({ length: 8 }).map((_, i) => (
         <span key={i} className="pop-shard" style={{ "--i": i }}></span>
+      ))}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <span key={`dust-${i}`} className="stardust-drop" style={{ "--i": i }}>
+          {i % 5 === 0 ? "✦" : i % 4 === 0 ? "□" : "•"}
+        </span>
       ))}
     </span>
   );

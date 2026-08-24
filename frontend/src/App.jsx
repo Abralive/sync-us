@@ -10,7 +10,21 @@ import TaskBoard from "./components/TaskBoard.jsx";
 import TaskForm from "./components/TaskForm.jsx";
 
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
-const REVIEW_MODE = SEARCH_PARAMS.get("review") === "1";
+const LOCAL_REVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const REVIEW_MODE = LOCAL_REVIEW_HOSTS.has(window.location.hostname)
+  && SEARCH_PARAMS.get("review") === "1";
+const AUTH_STORAGE_KEY = "sync-us-auth";
+const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function loadStoredAuth() {
+  try {
+    const data = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || "null");
+    if (!data?.userId || !data?.expiresAt || Date.now() > data.expiresAt) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
   const [users, setUsers] = useState([]);
@@ -18,12 +32,14 @@ export default function App() {
   const [completed, setCompleted] = useState([]);
   const [stats, setStats] = useState(null);
   const [couple, setCouple] = useState(null);
-  const [activeUser, setActiveUser] = useState(1);
-  const [isAuthenticated, setIsAuthenticated] = useState(REVIEW_MODE);
+  const [activeUser, setActiveUser] = useState(() => loadStoredAuth()?.userId || 1);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => REVIEW_MODE || Boolean(loadStoredAuth()));
   const [activeTab, setActiveTab] = useState("home");
   const [isTaskSheetOpen, setIsTaskSheetOpen] = useState(false);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [manualRequired, setManualRequired] = useState(false);
 
   const coupleId = couple?.id || 1;
   const stardust = stats?.stardust || 0;
@@ -44,25 +60,38 @@ export default function App() {
     try {
       const userData = await request("/users");
       setUsers(userData);
+      const resolvedActiveUser = userData.some((user) => user.id === Number(activeUser))
+        ? activeUser
+        : userData[0]?.id;
+      if (resolvedActiveUser && Number(resolvedActiveUser) !== Number(activeUser)) {
+        setActiveUser(resolvedActiveUser);
+        return;
+      }
 
       const coupleData = await loadCouple(activeUser);
       if (!coupleData) {
         setTasks([]);
         setCompleted([]);
         setStats(null);
+        setManualRequired(false);
         setError("");
+        setActiveTab("partner");
         return;
       }
 
       const cid = coupleData.id;
-      const [taskData, doneData, statData] = await Promise.all([
+      const [taskData, doneData, statData, manualData] = await Promise.all([
         request(`/tasks?couple_id=${cid}&user_id=${activeUser}&view=all`),
         request(`/tasks/completed?couple_id=${cid}&user_id=${activeUser}&view=all`),
         request(`/stats?couple_id=${cid}`),
+        request(`/couples/${cid}/manual?user_id=${activeUser}`),
       ]);
       setTasks(taskData);
       setCompleted(doneData);
       setStats(statData);
+      const needsManual = !REVIEW_MODE && (manualData.entries || []).length === 0;
+      setManualRequired(needsManual);
+      if (needsManual && activeTab !== "partner") setActiveTab("partner");
       setError("");
     } catch (err) {
       setError(err.message);
@@ -78,6 +107,23 @@ export default function App() {
     load();
   }, [activeUser, refreshTick]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    function refreshOnFocus() {
+      setRefreshTick((tick) => tick + 1);
+    }
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || couple) return undefined;
+    const timer = window.setInterval(() => {
+      setRefreshTick((tick) => tick + 1);
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, couple]);
+
   const activeName = useMemo(
     () => users.find((user) => user.id === Number(activeUser))?.username || "Sync",
     [users, activeUser]
@@ -87,18 +133,32 @@ export default function App() {
     setRefreshTick((tick) => tick + 1);
   }
 
+  function persistAuthenticatedUser(userId) {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+      userId,
+      expiresAt: Date.now() + AUTH_TTL_MS,
+    }));
+    setActiveUser(userId);
+  }
+
   async function handleConnected() {
     await load();
-    setActiveTab("home");
+    setActiveTab("partner");
   }
 
   function handleTabChange(nextTab) {
+    if (!REVIEW_MODE && manualRequired && nextTab !== "partner" && nextTab !== "profile") {
+      setActiveTab("partner");
+      setIsTaskSheetOpen(false);
+      return;
+    }
     setActiveTab(nextTab);
     setIsTaskSheetOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function logout() {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     setIsAuthenticated(false);
   }
 
@@ -108,7 +168,7 @@ export default function App() {
         users={users}
         onUsersChanged={loadUsersOnly}
         onAuthenticated={(userId) => {
-          setActiveUser(userId);
+          persistAuthenticatedUser(userId);
           setIsAuthenticated(true);
         }}
       />
@@ -121,8 +181,11 @@ export default function App() {
         users={users}
         activeUser={activeUser}
         activeTab={activeTab}
-        onActiveUserChange={setActiveUser}
+        selectedDate={selectedDate}
+        manualRequired={manualRequired}
+        onActiveUserChange={persistAuthenticatedUser}
         onTabChange={handleTabChange}
+        onSelectedDateChange={setSelectedDate}
         onLogout={logout}
       />
 
@@ -165,6 +228,8 @@ export default function App() {
           <TaskBoard
             tasks={tasks}
             activeUser={activeUser}
+            selectedDate={selectedDate}
+            onSelectedDateChange={setSelectedDate}
             onRefresh={refresh}
             onAddTask={() => setIsTaskSheetOpen(true)}
             onGoHome={() => setActiveTab("home")}

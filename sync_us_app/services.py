@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import json
+import secrets
 import sqlite3
+import string
 
 from .database import connect, row_to_dict, utc_now, utc_now_dt
 
@@ -45,6 +47,8 @@ MANUAL_CATEGORIES = {
 
 MANUAL_STATUS = {"pending", "confirmed"}
 MANUAL_SOURCE_TYPES = {"manual", "self", "ai_suggestion", "footprint"}
+INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
+INVITE_TTL = timedelta(days=7)
 
 
 def parse_dt(value) -> datetime | None:
@@ -91,12 +95,18 @@ def get_user(user_id: int) -> dict:
 
 def create_couple(data: dict) -> dict:
     with connect() as conn:
+        partner_a = int(data["partner_a_id"])
+        partner_b = int(data["partner_b_id"])
+        if partner_a == partner_b:
+            raise ValidationError("Cannot connect a user to themselves")
+        ensure_user_has_no_active_couple(conn, partner_a)
+        ensure_user_has_no_active_couple(conn, partner_b)
         cur = conn.execute(
             """
             INSERT INTO couples (partner_a_id, partner_b_id, status, created_at)
             VALUES (?, ?, 'active', ?)
             """,
-            (data["partner_a_id"], data["partner_b_id"], utc_now()),
+            (partner_a, partner_b, utc_now()),
         )
         conn.commit()
         return get_couple(cur.lastrowid)
@@ -122,12 +132,233 @@ def get_couple(couple_id: int) -> dict:
 def get_user_couple(user_id: int) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM couples WHERE partner_a_id = ? OR partner_b_id = ? ORDER BY id DESC LIMIT 1",
+            """
+            SELECT *
+            FROM couples
+            WHERE status = 'active'
+              AND (partner_a_id = ? OR partner_b_id = ?)
+            ORDER BY id DESC
+            LIMIT 1
+            """,
             (user_id, user_id),
         ).fetchone()
         if not row:
             raise NotFoundError("Couple not found")
         return row_to_dict(row)
+
+
+def ensure_user_has_no_active_couple(conn: sqlite3.Connection, user_id: int) -> None:
+    row = conn.execute(
+        """
+        SELECT id
+        FROM couples
+        WHERE status = 'active'
+          AND (partner_a_id = ? OR partner_b_id = ?)
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if row:
+        raise ConflictError("User already has an active Sync-Us connection")
+
+
+def generate_invite_code(conn: sqlite3.Connection) -> str:
+    for _ in range(20):
+        code = "SYNC-" + "".join(secrets.choice(INVITE_CODE_ALPHABET) for _ in range(4))
+        exists = conn.execute("SELECT id FROM couple_invites WHERE invite_code = ?", (code,)).fetchone()
+        if not exists:
+            return code
+    raise ConflictError("Could not generate invite code")
+
+
+def normalize_invite(row: sqlite3.Row) -> dict:
+    invite = row_to_dict(row)
+    expires_at = parse_dt(invite.get("expires_at"))
+    if invite["status"] == "pending" and expires_at and expires_at < utc_now_dt():
+        invite["status"] = "expired"
+    return invite
+
+
+def create_couple_invite(data: dict) -> dict:
+    inviter_id = int(data.get("inviter_id") or data.get("user_id"))
+    invitee_email = (data.get("invitee_email") or "").strip().lower() or None
+    with connect() as conn:
+        inviter = conn.execute("SELECT * FROM users WHERE id = ?", (inviter_id,)).fetchone()
+        if not inviter:
+            raise NotFoundError("Inviter not found")
+        ensure_user_has_no_active_couple(conn, inviter_id)
+        existing = conn.execute(
+            """
+            SELECT *
+            FROM couple_invites
+            WHERE inviter_id = ? AND status = 'pending' AND expires_at > ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (inviter_id, utc_now()),
+        ).fetchone()
+        if existing:
+            return normalize_invite(existing)
+
+        code = generate_invite_code(conn)
+        now = utc_now()
+        expires_at = (utc_now_dt() + INVITE_TTL).isoformat()
+        cur = conn.execute(
+            """
+            INSERT INTO couple_invites (
+                inviter_id, invitee_email, invite_code, status, expires_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
+            """,
+            (inviter_id, invitee_email, code, expires_at, now, now),
+        )
+        conn.commit()
+        return get_couple_invite(cur.lastrowid)
+
+
+def get_couple_invite(invite_id: int) -> dict:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT i.*, inviter.username AS inviter_name, inviter.email AS inviter_email,
+                   accepter.username AS accepted_by_name
+            FROM couple_invites i
+            JOIN users inviter ON inviter.id = i.inviter_id
+            LEFT JOIN users accepter ON accepter.id = i.accepted_by_id
+            WHERE i.id = ?
+            """,
+            (invite_id,),
+        ).fetchone()
+        if not row:
+            raise NotFoundError("Invite not found")
+        invite = normalize_invite(row)
+        if invite["status"] == "expired":
+            conn.execute(
+                "UPDATE couple_invites SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'pending'",
+                (utc_now(), invite_id),
+            )
+            conn.commit()
+        return invite
+
+
+def get_couple_invite_by_code(invite_code: str) -> dict:
+    code = (invite_code or "").strip().upper()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT i.*, inviter.username AS inviter_name, inviter.email AS inviter_email,
+                   accepter.username AS accepted_by_name
+            FROM couple_invites i
+            JOIN users inviter ON inviter.id = i.inviter_id
+            LEFT JOIN users accepter ON accepter.id = i.accepted_by_id
+            WHERE i.invite_code = ?
+            """,
+            (code,),
+        ).fetchone()
+        if not row:
+            raise NotFoundError("Invite not found")
+        invite = normalize_invite(row)
+        if invite["status"] == "expired":
+            conn.execute(
+                "UPDATE couple_invites SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'pending'",
+                (utc_now(), invite["id"]),
+            )
+            conn.commit()
+        return invite
+
+
+def list_couple_invites_for_user(user_id: int) -> dict:
+    with connect() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise NotFoundError("User not found")
+        rows = conn.execute(
+            """
+            SELECT i.*, inviter.username AS inviter_name, inviter.email AS inviter_email,
+                   accepter.username AS accepted_by_name
+            FROM couple_invites i
+            JOIN users inviter ON inviter.id = i.inviter_id
+            LEFT JOIN users accepter ON accepter.id = i.accepted_by_id
+            WHERE i.inviter_id = ?
+               OR lower(i.invitee_email) = lower(?)
+            ORDER BY i.id DESC
+            """,
+            (user_id, user["email"]),
+        ).fetchall()
+        return {"sent_or_received": [normalize_invite(row) for row in rows]}
+
+
+def accept_couple_invite(invite_code: str, data: dict) -> dict:
+    user_id = int(data.get("user_id") or data.get("accepted_by_id"))
+    code = (invite_code or "").strip().upper()
+    with connect() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise NotFoundError("User not found")
+        invite = conn.execute(
+            "SELECT * FROM couple_invites WHERE invite_code = ?",
+            (code,),
+        ).fetchone()
+        if not invite:
+            raise NotFoundError("Invite not found")
+        if invite["status"] != "pending":
+            raise ConflictError("Invite is not pending")
+        expires_at = parse_dt(invite["expires_at"])
+        if expires_at and expires_at < utc_now_dt():
+            conn.execute(
+                "UPDATE couple_invites SET status = 'expired', updated_at = ? WHERE id = ?",
+                (utc_now(), invite["id"]),
+            )
+            conn.commit()
+            raise ConflictError("Invite expired")
+        if invite["inviter_id"] == user_id:
+            raise ValidationError("Invite must be accepted by the other person")
+        if invite["invitee_email"] and invite["invitee_email"].lower() != user["email"].lower():
+            raise ValidationError("This invite is for a different email")
+        ensure_user_has_no_active_couple(conn, invite["inviter_id"])
+        ensure_user_has_no_active_couple(conn, user_id)
+        now = utc_now()
+        cur = conn.execute(
+            """
+            INSERT INTO couples (partner_a_id, partner_b_id, status, created_at)
+            VALUES (?, ?, 'active', ?)
+            """,
+            (invite["inviter_id"], user_id, now),
+        )
+        couple_id = cur.lastrowid
+        conn.execute(
+            """
+            UPDATE couple_invites
+            SET status = 'accepted', accepted_by_id = ?, couple_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (user_id, couple_id, now, invite["id"]),
+        )
+        conn.commit()
+        return get_couple(couple_id)
+
+
+def decline_couple_invite(invite_code: str, data: dict) -> dict:
+    user_id = int(data.get("user_id"))
+    code = (invite_code or "").strip().upper()
+    with connect() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        invite = conn.execute("SELECT * FROM couple_invites WHERE invite_code = ?", (code,)).fetchone()
+        if not user or not invite:
+            raise NotFoundError("Invite not found")
+        if invite["status"] != "pending":
+            raise ConflictError("Invite is not pending")
+        if invite["inviter_id"] != user_id and (
+            not invite["invitee_email"] or invite["invitee_email"].lower() != user["email"].lower()
+        ):
+            raise ValidationError("User cannot decline this invite")
+        now = utc_now()
+        conn.execute(
+            "UPDATE couple_invites SET status = 'declined', updated_at = ? WHERE id = ?",
+            (now, invite["id"]),
+        )
+        conn.commit()
+        return get_couple_invite_by_code(code)
 
 
 def ensure_couple_member(conn: sqlite3.Connection, couple_id: int, user_id: int | None) -> sqlite3.Row:

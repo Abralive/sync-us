@@ -1,5 +1,13 @@
-import { CalendarCheck, ChevronLeft, ChevronRight, Gift, HeartHandshake, Home, Settings, User } from "lucide-react";
-import { useState } from "react";
+import {
+  CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
+  Gift,
+  HeartHandshake,
+  Home,
+  Settings,
+  User,
+} from "lucide-react";
 
 const NAV_ITEMS = [
   { key: "home", label: "星域", icon: Home },
@@ -11,22 +19,33 @@ const NAV_ITEMS = [
 
 const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
-function formatJournalDate(date) {
-  return `${date.getMonth() + 1} 月 ${date.getDate()} 日・星期${WEEKDAYS[date.getDay()]}`;
-}
-
 function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
 }
 
+function formatSelectedDate(date) {
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日・星期${WEEKDAYS[date.getDay()]}`;
+}
+
 function getInitial(name) {
   return name?.trim()?.slice(0, 1) || "?";
 }
 
-export default function Header({ users, activeUser, activeTab, onActiveUserChange, onTabChange, onLogout }) {
-  const [viewDate, setViewDate] = useState(new Date());
+export default function Header({
+  users,
+  activeUser,
+  activeTab,
+  selectedDate,
+  manualRequired,
+  onActiveUserChange,
+  onTabChange,
+  onSelectedDateChange,
+  onLogout,
+}) {
+  const showWeekSwitcher = activeTab === "tasks";
+  const visibleDate = selectedDate || new Date();
 
   return (
     <header className="topbar journal-topbar">
@@ -34,11 +53,11 @@ export default function Header({ users, activeUser, activeTab, onActiveUserChang
         <div className="brand-mark"></div>
         <div>
           <h1 className="brand-title">Sync-Us</h1>
-          <p className="brand-subtitle">兩人的共享手帳</p>
+          <p className="brand-subtitle">兩個人的泡泡星域</p>
         </div>
       </div>
 
-      <nav className="desktop-nav" aria-label="桌面主要導覽">
+      <nav className="desktop-nav" aria-label="主要導覽">
         {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -52,15 +71,21 @@ export default function Header({ users, activeUser, activeTab, onActiveUserChang
         ))}
       </nav>
 
-      <div className="date-switcher" aria-label="日期切換">
-        <button type="button" onClick={() => setViewDate((date) => addDays(date, -1))} aria-label="前一天">
-          <ChevronLeft size={21} />
-        </button>
-        <strong>{formatJournalDate(viewDate)}</strong>
-        <button type="button" onClick={() => setViewDate((date) => addDays(date, 1))} aria-label="後一天">
-          <ChevronRight size={21} />
-        </button>
-      </div>
+      {showWeekSwitcher && (
+        <div className="date-switcher week-switcher" aria-label="日期切換">
+          <button type="button" onClick={() => onSelectedDateChange(addDays(visibleDate, -1))} aria-label="前一天">
+            <ChevronLeft size={21} />
+          </button>
+          <strong aria-live="polite">{formatSelectedDate(visibleDate)}</strong>
+          <button type="button" onClick={() => onSelectedDateChange(addDays(visibleDate, 1))} aria-label="後一天">
+            <ChevronRight size={21} />
+          </button>
+        </div>
+      )}
+
+      {manualRequired && activeTab !== "partner" && (
+        <div className="manual-required-pill">先完成小手冊</div>
+      )}
 
       <div className="topbar-actions journal-actions">
         <div className="partner-avatars" aria-label="使用者切換">
@@ -70,7 +95,7 @@ export default function Header({ users, activeUser, activeTab, onActiveUserChang
               type="button"
               className={`partner-avatar avatar-${index + 1} ${Number(activeUser) === user.id ? "active" : ""}`}
               onClick={() => onActiveUserChange(user.id)}
-              aria-label={`切換為 ${user.username}`}
+              aria-label={`切換成 ${user.username}`}
               title={user.username}
             >
               <span>{getInitial(user.username)}</span>

@@ -18,8 +18,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(120deg, rgba(111, 167, 161, 0.12), transparent 34%),
-    linear-gradient(260deg, rgba(232, 130, 109, 0.12), transparent 30%),
+    linear-gradient(90deg, rgba(31, 56, 56, 0.026) 1px, transparent 1px) 0 0 / 36px 100%,
     var(--paper);
   color: var(--ink);
   font-family: "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
@@ -2180,6 +2179,7 @@ button { cursor: pointer; border: 0; }
 }
 
 .shop-item {
+  position: relative;
   padding: 16px;
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -5756,6 +5756,48 @@ body {
   margin: 0;
 }
 
+.assignee-picker {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.assignee-picker legend {
+  margin-bottom: 8px;
+  color: #5c706d;
+  font-weight: 900;
+}
+
+.assignee-picker div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assignee-picker button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid rgba(31, 59, 55, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.8);
+  color: #1d3532;
+  font-weight: 900;
+}
+
+.assignee-picker button.active {
+  border-color: rgba(31, 59, 55, 0.92);
+  background: #1d3331;
+  color: #fffdf7;
+}
+
+.assignee-picker span {
+  color: #617470;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
 @media (max-width: 900px) {
   .connection-journal,
   .bubble-mobile-shell {
@@ -6823,16 +6865,159 @@ body {
   background: rgba(255, 253, 247, 0.82);
 }
 
+.pair-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.pair-invite-panel h3 {
+  margin: 4px 0 6px;
+  color: #183533;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+}
+
+.pair-invite-panel p {
+  margin: 0;
+  color: #617470;
+  line-height: 1.7;
+}
+
 .pair-invite-panel label {
   display: grid;
   gap: 8px;
   font-weight: 900;
 }
 
-.pair-invite-panel select {
+.pair-invite-panel select,
+.pair-invite-panel input {
   padding: 12px;
   border-radius: 13px;
   border: 1px solid rgba(31, 59, 55, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: #1d3532;
+  font: inherit;
+}
+
+.invite-code-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px dashed rgba(83, 139, 132, 0.55);
+  border-radius: 16px;
+  background: rgba(232, 246, 242, 0.72);
+}
+
+.invite-code-card span {
+  color: #617470;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.invite-code-card strong {
+  color: #173532;
+  font-size: 1.45rem;
+  letter-spacing: 0.06em;
+}
+
+.invite-code-card button,
+.pair-pending-list button {
+  border: 1px solid rgba(31, 59, 55, 0.16);
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #173532;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.invite-code-card button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  padding: 9px 13px;
+}
+
+.pair-pending-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pair-pending-list h3 {
+  margin: 0;
+  color: #183533;
+}
+
+.pair-pending-list article {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 13px 14px;
+  border-bottom: 1px solid rgba(31, 59, 55, 0.12);
+  background: rgba(255, 253, 247, 0.56);
+}
+
+.pair-pending-list article div {
+  display: grid;
+  gap: 3px;
+}
+
+.pair-pending-list article span {
+  color: #607470;
+  font-size: 0.9rem;
+}
+
+.pair-pending-list button {
+  padding: 8px 12px;
+}
+
+.pair-pending-list.muted article {
+  grid-template-columns: 1fr auto;
+}
+
+.pair-privacy-note,
+.manual-success {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #55706d;
+  background: rgba(244, 238, 224, 0.62);
+  line-height: 1.65;
+}
+
+.manual-success {
+  border: 1px solid rgba(83, 139, 132, 0.22);
+  background: rgba(232, 246, 242, 0.75);
+  color: #21524e;
+  font-weight: 850;
+}
+
+.manual-required-pill {
+  justify-self: center;
+  padding: 10px 16px;
+  border: 1px solid rgba(232, 116, 94, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 240, 232, 0.82);
+  color: #9a4a35;
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+@media (max-width: 720px) {
+  .pair-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pair-pending-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .pair-pending-list.muted article {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== Completion record modal ===== */
@@ -6963,6 +7148,244 @@ body {
 
 .original-bubble-panel {
   width: min(520px, calc(100vw - 28px));
+}
+
+/* ===== Tone and reward animation pass ===== */
+.shared-journal-app {
+  background:
+    linear-gradient(90deg, rgba(31, 56, 56, 0.028) 1px, transparent 1px) 0 0 / 36px 100%,
+    radial-gradient(circle at 16% 14%, rgba(151, 195, 187, 0.055), transparent 22%),
+    radial-gradient(circle at 92% 10%, rgba(232, 151, 128, 0.045), transparent 20%),
+    #fbf6ec;
+}
+
+.journal-home .date-switcher,
+.manual-page .date-switcher,
+.shop-page .date-switcher,
+.profile-page .date-switcher {
+  display: none;
+}
+
+.reward-burst {
+  overflow: visible;
+}
+
+.stardust-drop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  color: #e7b84f;
+  font-size: 22px;
+  font-weight: 900;
+  opacity: 0;
+  text-shadow: 0 2px 8px rgba(195, 139, 43, 0.28);
+  transform: translate(-50%, -50%);
+  animation: stardustFall 1.42s cubic-bezier(.18,.72,.2,1) forwards;
+  animation-delay: calc(var(--i) * 28ms);
+}
+
+.stardust-drop:nth-child(odd) {
+  color: #7bb8ae;
+}
+
+.stardust-drop:nth-child(3n) {
+  color: #e89076;
+}
+
+@keyframes stardustFall {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.65) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    transform:
+      translate(
+        calc(-50% + (var(--i) - 5.5) * 18px),
+        calc(-50% - 52px - (var(--i) % 3) * 14px)
+      )
+      scale(1)
+      rotate(calc(var(--i) * 24deg));
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate(
+        calc(-50% + (var(--i) - 5.5) * 22px),
+        118px
+      )
+      scale(0.78)
+      rotate(calc(var(--i) * 58deg));
+  }
+}
+
+.shop-item:not(.locked) {
+  border-color: rgba(232, 116, 94, 0.28);
+  box-shadow: 0 14px 28px rgba(232, 116, 94, 0.1);
+}
+
+.shop-item:not(.locked)::after {
+  content: "可兌換";
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(232, 116, 94, 0.14);
+  color: #9a4a35;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.shop-item.redeemed {
+  border-color: rgba(109, 164, 156, 0.42);
+  background:
+    linear-gradient(180deg, rgba(237, 249, 245, 0.64), rgba(255, 252, 245, 0.88));
+}
+
+.shop-item.redeemed::after {
+  content: "已兌換";
+  background: rgba(109, 164, 156, 0.18);
+  color: #2c635d;
+}
+
+.shop-item.redeemed .btn.primary {
+  opacity: 1;
+  background: #d9e8e3;
+  color: #2c635d;
+}
+
+/* ===== Agenda date sync and custom due input cleanup ===== */
+.bubble-agenda-page {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.agenda-date-strip {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.agenda-date-strip button {
+  min-width: 0;
+}
+
+.agenda-tools,
+.agenda-search {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-sheet-panel {
+  width: min(720px, calc(100vw - 24px));
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.bubble-sheet-form {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.due-picker {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.due-picker legend {
+  margin-bottom: 8px;
+  color: #5c706d;
+  font-weight: 900;
+}
+
+.due-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.due-chip-row button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(31, 59, 55, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.8);
+  color: #1d3532;
+  font-weight: 900;
+}
+
+.due-chip-row button.active {
+  border-color: rgba(31, 59, 55, 0.9);
+  background: #1d3331;
+  color: #fffdf7;
+}
+
+.due-input-grid {
+  display: grid;
+  grid-template-columns: 1fr 0.72fr;
+  gap: 10px;
+}
+
+.agenda-calendar-cell {
+  background: rgba(255, 252, 245, 0.68);
+  cursor: pointer;
+}
+
+.agenda-calendar-cell.active {
+  outline: 2px solid rgba(31, 59, 55, 0.55);
+  outline-offset: -2px;
+  background: rgba(232, 246, 242, 0.82);
+}
+
+.agenda-filter-drawer fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agenda-filter-drawer legend {
+  margin-bottom: 8px;
+  color: #617570;
+  font-size: 0.92rem;
+  font-weight: 900;
+}
+
+.filter-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-pill-row button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border: 1px solid rgba(31, 59, 55, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.76);
+  color: #617570;
+  font-weight: 900;
+}
+
+.filter-pill-row button.active {
+  border-color: #203936;
+  background: #203936;
+  color: #fffaf0;
+}
+
+@media (max-width: 720px) {
+  .due-input-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
