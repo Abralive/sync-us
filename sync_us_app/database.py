@@ -146,6 +146,21 @@ def init_db() -> None:
                 FOREIGN KEY(updated_by_id) REFERENCES users(id)
             );
 
+            CREATE TABLE IF NOT EXISTS reward_redemptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                couple_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                item_key TEXT NOT NULL,
+                item_title TEXT NOT NULL,
+                cost INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(couple_id) REFERENCES couples(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_rewards_couple
+                ON reward_redemptions(couple_id, created_at DESC);
+
             CREATE INDEX IF NOT EXISTS idx_manual_couple_subject
                 ON partner_manual_entries(couple_id, subject_user_id, status);
 

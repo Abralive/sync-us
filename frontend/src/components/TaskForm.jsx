@@ -1,56 +1,81 @@
-import { useMemo, useState } from "react";
+import { Lock } from "lucide-react";
+import { useState } from "react";
 import { request } from "../api/client.js";
+import { bubbleTone, weightLabel } from "../constants.js";
+import { addDays, formatTime, isSameDay, startOfDay, toDateInputValue, upcomingWeekend } from "../utils/date.js";
 
-const initialForm = {
-  title: "",
-  description: "",
-  due_date: "",
-  due_time_text: "",
-  priority_weight: 55,
-  assigned_to_id: "",
-  is_private: false,
-  reminder_minutes: 60,
-  collaboration_note: "",
-};
-
-function localMinNow() {
-  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-  return now.toISOString().slice(0, 16);
+function defaultTime(dateText) {
+  const now = new Date();
+  const evening = new Date(now);
+  evening.setHours(20, 0, 0, 0);
+  if (dateText !== toDateInputValue(now) || evening - now > 30 * 60000) return "20:00";
+  const soon = new Date(now);
+  soon.setMinutes(0, 0, 0);
+  soon.setHours(soon.getHours() + 2);
+  return isSameDay(soon, now) ? formatTime(soon) : "23:55";
 }
 
-function localDate(days = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+function initialForm(defaultDate) {
+  const now = new Date();
+  const today = startOfDay(now);
+  let base = defaultDate && startOfDay(defaultDate) >= today ? defaultDate : now;
+  // Late at night, "today" is almost over — suggest tomorrow evening instead.
+  if (isSameDay(base, now) && now.getHours() >= 22) base = addDays(now, 1);
+  const dueDate = toDateInputValue(base);
+  return {
+    title: "",
+    description: "",
+    due_date: dueDate,
+    due_time: defaultTime(dueDate),
+    priority_weight: 55,
+    assigned_to_id: "",
+    is_private: false,
+  };
 }
 
 function parseLocalDue(dateText, timeText) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText.trim());
-  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(timeText.trim());
-  if (!match || !timeMatch) return null;
-  const [, year, month, day] = match;
-  const [, hour, minute] = timeMatch;
-  const due = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-  if (Number.isNaN(due.getTime())) return null;
-  return due;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec((dateText || "").trim());
+  const timeMatch = /^(\d{1,2}):(\d{2})$/.exec((timeText || "").trim());
+  if (!dateMatch || !timeMatch) return null;
+  const due = new Date(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+    Number(timeMatch[1]),
+    Number(timeMatch[2])
+  );
+  return Number.isNaN(due.getTime()) ? null : due;
 }
 
-export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
-  const [form, setForm] = useState(initialForm);
+export default function TaskForm({ members, activeUser, coupleId, defaultDate, onCreated, onCancel }) {
+  const [form, setForm] = useState(() => initialForm(defaultDate));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const me = Number(activeUser);
+  const today = new Date();
+  const tomorrow = addDays(today, 1);
+  const weekend = upcomingWeekend(today);
+  const quickDates = [
+    ["今天", today],
+    ["明天", tomorrow],
+    // On Fridays/weekends "這週末" would repeat 今天/明天, so offer next week instead.
+    startOfDay(weekend) > startOfDay(tomorrow) ? ["這週末", weekend] : ["下週", addDays(today, 7)],
+  ];
 
-  const assigneeLabel = useMemo(() => {
-    if (!form.assigned_to_id) return "一起照顧";
-    return users.find((user) => user.id === Number(form.assigned_to_id))?.username || "一起照顧";
-  }, [form.assigned_to_id, users]);
+  function update(patch) {
+    setForm((current) => ({ ...current, ...patch }));
+  }
 
   async function submit(event) {
     event.preventDefault();
     setError("");
-    const due = parseLocalDue(form.due_date, form.due_time_text);
-    if (!form.title.trim() || !due) {
-      setError("請填寫泡泡名稱與時間。");
+    const due = parseLocalDue(form.due_date, form.due_time);
+    if (!form.title.trim()) {
+      setError("請幫泡泡取個名字。");
+      return;
+    }
+    if (!due) {
+      setError("請選擇日期和時間。");
       return;
     }
     if (due.getTime() <= Date.now()) {
@@ -59,23 +84,21 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
     }
     setSubmitting(true);
     try {
-      await request("/tasks", {
+      const created = await request("/tasks", {
         method: "POST",
         body: JSON.stringify({
-          ...form,
           title: form.title.trim(),
           description: form.description.trim(),
-          collaboration_note: form.collaboration_note.trim(),
           due_time: due.toISOString(),
-          created_by_id: activeUser,
-          assigned_to_id: form.assigned_to_id ? Number(form.assigned_to_id) : null,
+          created_by_id: me,
+          assigned_to_id: form.is_private ? me : form.assigned_to_id ? Number(form.assigned_to_id) : null,
+          is_private: form.is_private,
           priority_weight: Number(form.priority_weight),
-          reminder_minutes: Number(form.reminder_minutes),
+          reminder_minutes: 60,
           couple_id: coupleId,
         }),
       });
-      setForm(initialForm);
-      onCreated();
+      onCreated(created);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -83,118 +106,137 @@ export default function TaskForm({ users, activeUser, coupleId, onCreated }) {
     }
   }
 
+  const tone = bubbleTone(Number(form.priority_weight));
+
   return (
-    <form onSubmit={submit} className="growth-form bubble-sheet-form">
-      <label>
-        泡泡名稱
+    <form onSubmit={submit} className="task-form" noValidate>
+      <label className="field">
+        <span>泡泡名稱</span>
         <input
           value={form.title}
-          onChange={(event) => setForm({ ...form, title: event.target.value })}
+          onChange={(event) => update({ title: event.target.value })}
           placeholder="例如：一起確認住宿"
+          maxLength={60}
+          autoComplete="off"
+          enterKeyHint="next"
         />
       </label>
 
-      <fieldset className="due-picker">
-        <legend>時間</legend>
-        <div className="due-chip-row">
-          {[
-            ["今天", 0],
-            ["明天", 1],
-            ["週末", 5],
-          ].map(([label, offset]) => (
-            <button
-              key={label}
-              type="button"
-              className={form.due_date === localDate(offset) ? "active" : ""}
-              onClick={() => setForm({ ...form, due_date: localDate(offset), due_time_text: form.due_time_text || "20:00" })}
-            >
-              {label}
-            </button>
-          ))}
+      <fieldset className="field">
+        <legend>什麼時候</legend>
+        <div className="chip-row">
+          {quickDates.map(([label, date]) => {
+            const value = toDateInputValue(date);
+            return (
+              <button
+                key={label}
+                type="button"
+                className={`chip${form.due_date === value ? " active" : ""}`}
+                aria-pressed={form.due_date === value}
+                onClick={() => update({ due_date: value, due_time: defaultTime(value) })}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
-        <div className="due-input-grid">
-          <label>
-            日期
+        <div className="field-pair">
+          <label className="field">
+            <span>日期</span>
             <input
+              type="date"
               value={form.due_date}
-              onChange={(event) => setForm({ ...form, due_date: event.target.value })}
-              placeholder={localDate()}
-              inputMode="numeric"
+              min={toDateInputValue(today)}
+              onChange={(event) => update({ due_date: event.target.value })}
             />
           </label>
-          <label>
-            時間
+          <label className="field">
+            <span>時間</span>
             <input
-              value={form.due_time_text}
-              onChange={(event) => setForm({ ...form, due_time_text: event.target.value })}
-              placeholder="20:00"
-              inputMode="numeric"
+              type="time"
+              value={form.due_time}
+              step={300}
+              onChange={(event) => update({ due_time: event.target.value })}
             />
           </label>
         </div>
       </fieldset>
 
-      <label>
-        簡短備註
+      <label className="field">
+        <span>簡短備註（選填）</span>
         <input
           value={form.description}
-          onChange={(event) => setForm({ ...form, description: event.target.value })}
+          onChange={(event) => update({ description: event.target.value })}
           placeholder="補一句對方需要知道的事"
+          maxLength={120}
         />
       </label>
 
-      <div className="growth-row">
-        <fieldset className="assignee-picker">
-          <legend>交給誰</legend>
-          <div>
-            <button
-              type="button"
-              className={!form.assigned_to_id ? "active" : ""}
-              onClick={() => setForm({ ...form, assigned_to_id: "" })}
-              aria-pressed={!form.assigned_to_id}
-            >
-              一起照顧
-            </button>
-            {users.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                className={Number(form.assigned_to_id) === user.id ? "active" : ""}
-                onClick={() => setForm({ ...form, assigned_to_id: String(user.id) })}
-                aria-pressed={Number(form.assigned_to_id) === user.id}
-              >
-                {user.username}
-              </button>
-            ))}
-          </div>
-          <span>目前：{assigneeLabel}</span>
-        </fieldset>
-
-        <label>
-          重要度 {form.priority_weight}
-          <input
-            type="range"
-            min="1"
-            max="100"
-            value={form.priority_weight}
-            onChange={(event) => setForm({ ...form, priority_weight: event.target.value })}
-          />
-        </label>
-      </div>
-
-      <label className="quiet-toggle">
+      <label className="switch-field">
         <input
           type="checkbox"
           checked={form.is_private}
-          onChange={(event) => setForm({ ...form, is_private: event.target.checked })}
+          onChange={(event) => update({ is_private: event.target.checked })}
         />
-        只放在我的私人軌道
+        <span className="switch" aria-hidden="true"></span>
+        <span>
+          <strong><Lock size={14} /> 只放在我的私人軌道</strong>
+          <small>對方看不到內容，只會知道你有幾顆私人泡泡。</small>
+        </span>
       </label>
 
-      {error && <div className="error">{error}</div>}
-      <button className="btn primary" disabled={submitting}>
-        {submitting ? "長出泡泡中..." : "長出泡泡"}
-      </button>
+      {!form.is_private && (
+        <fieldset className="field">
+          <legend>交給誰</legend>
+          <div className="segmented segmented-wide">
+            <button
+              type="button"
+              className={!form.assigned_to_id ? "active" : ""}
+              aria-pressed={!form.assigned_to_id}
+              onClick={() => update({ assigned_to_id: "" })}
+            >
+              <span className="truncate">一起照顧</span>
+            </button>
+            {members.map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                className={Number(form.assigned_to_id) === member.id ? "active" : ""}
+                aria-pressed={Number(form.assigned_to_id) === member.id}
+                onClick={() => update({ assigned_to_id: String(member.id) })}
+              >
+                <span className="truncate">{member.id === me ? `${member.username}（我）` : member.username}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      <label className="field">
+        <span className="range-label">
+          重要度
+          <b className={`tag tag-${tone}`}>{form.priority_weight}・{weightLabel(Number(form.priority_weight))}</b>
+        </span>
+        <input
+          type="range"
+          min="1"
+          max="100"
+          value={form.priority_weight}
+          className={`range tone-${tone}`}
+          onChange={(event) => update({ priority_weight: event.target.value })}
+        />
+      </label>
+
+      {error && <div className="form-error" role="alert">{error}</div>}
+
+      <div className="btn-row btn-row-end">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          取消
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={submitting}>
+          {submitting ? "長出泡泡中..." : "長出泡泡"}
+        </button>
+      </div>
     </form>
   );
 }

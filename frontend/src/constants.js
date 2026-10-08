@@ -1,19 +1,40 @@
-export const VIEWS = {
-  shared: "共享星域",
-  private: "私人軌道",
-  mine: "我的泡泡",
-  all: "全部泡泡",
-};
+import { CalendarCheck, Gift, HeartHandshake, Home, User } from "lucide-react";
 
-export const REWARD_DROPS = [
-  { icon: "coin", label: "星塵幣", dust: 18 },
-  { icon: "crystal", label: "小晶石", dust: 24 },
-  { icon: "gift", label: "驚喜盒", dust: 32 },
-  { icon: "heart", label: "心動碎片", dust: 28 },
+export const NAV_ITEMS = [
+  { key: "home", label: "星域", icon: Home },
+  { key: "partner", label: "連結", icon: HeartHandshake },
+  { key: "tasks", label: "泡泡", icon: CalendarCheck },
+  { key: "shop", label: "商城", icon: Gift },
+  { key: "profile", label: "我的", icon: User },
 ];
 
-export const STORE_ITEMS = [
-  ["雙人咖啡券", "80 星塵", "完成共享泡泡後，換一個不用吵架的補給。"],
-  ["晚餐許願卡", "140 星塵", "把共同完成的努力，換成一次被認真安排的晚餐。"],
-  ["週末空白時段", "220 星塵", "保留一段不被打擾、也不被雜事插隊的共同時間。"],
+// Pages that need an active couple and at least one handbook entry.
+export const GATED_TABS = new Set(["home", "tasks", "shop"]);
+
+// Mirrors the reward catalogue on the server (used for the stardust jar preview).
+export const REWARD_PREVIEW = [
+  { title: "雙人咖啡券", cost: 80 },
+  { title: "晚餐許願卡", cost: 140 },
+  { title: "週末空白時段", cost: 220 },
 ];
+
+export function bubbleTone(weight) {
+  if (weight >= 80) return "hot";
+  if (weight >= 55) return "warm";
+  return "cool";
+}
+
+export function weightLabel(weight) {
+  if (weight >= 80) return "很重要";
+  if (weight >= 55) return "中等";
+  return "輕鬆";
+}
+
+export function initialOf(name) {
+  return name?.trim()?.slice(0, 1)?.toUpperCase() || "?";
+}
+
+export function memberTone(members, userId) {
+  const index = members.findIndex((member) => member.id === Number(userId));
+  return index === 1 ? 2 : 1;
+}

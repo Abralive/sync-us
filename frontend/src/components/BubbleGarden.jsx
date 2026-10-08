@@ -1,285 +1,333 @@
-import { CalendarDays, Heart, MessageCircle, Plus, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
-import CompletionRecordModal from "./CompletionRecordModal.jsx";
+import { CalendarDays, ChevronRight, Lock, Plus, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { REWARD_PREVIEW, bubbleTone } from "../constants.js";
+import { bubbleCapacity, layoutBubbles } from "../utils/bubbleLayout.js";
+import {
+  WEEKDAYS,
+  addDays,
+  formatDateTime,
+  isOverdue,
+  isSameDay,
+  parseServerDate,
+  startOfDay,
+} from "../utils/date.js";
+import Avatar from "./Avatar.jsx";
 import TaskCard from "./TaskCard.jsx";
-import { countdownText, formatDateTime } from "../utils/date.js";
 
-const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
-
-function addDays(date, days) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
+function hoursUntil(task, now) {
+  const due = parseServerDate(task.due_time);
+  return due ? (due - now) / 36e5 : 9999;
 }
 
-function getInitial(name) {
-  return name?.trim()?.slice(0, 1) || "?";
+function bubbleDiameter(task, now) {
+  const hours = hoursUntil(task, now);
+  const urgency = hours < 0 ? 22 : hours < 24 ? 20 : hours < 72 ? 10 : 0;
+  return 120 + (Number(task.priority_weight) || 0) * 0.95 + urgency;
 }
 
-function sortByDueTime(tasks) {
-  return [...tasks].sort((a, b) => new Date(a.due_time) - new Date(b.due_time));
+function importance(task, now) {
+  const hours = hoursUntil(task, now);
+  const urgency = hours < 0 ? 60 : hours < 24 ? 40 : hours < 72 ? 15 : 0;
+  return (Number(task.priority_weight) || 0) + urgency;
 }
 
-function GalaxyOrbits() {
+function byDueTime(a, b) {
+  return (parseServerDate(a.due_time) || 0) - (parseServerDate(b.due_time) || 0);
+}
+
+function useElementSize(ref) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      setSize((previous) => (
+        Math.abs(previous.width - rect.width) < 1 && Math.abs(previous.height - rect.height) < 1
+          ? previous
+          : { width: rect.width, height: rect.height }
+      ));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+function Orbits() {
   return (
-    <svg className="galaxy-orbits" viewBox="0 0 420 520" aria-hidden="true" focusable="false">
-      <ellipse cx="210" cy="260" rx="186" ry="116" className="orbit orbit-outer" />
-      <ellipse cx="210" cy="260" rx="142" ry="82" className="orbit orbit-middle" />
-      <ellipse cx="210" cy="260" rx="92" ry="52" className="orbit orbit-inner" />
-      <path className="orbit-pencil" d="M70 282 C130 198, 258 186, 350 248" />
+    <svg className="starfield-orbits" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <ellipse cx="200" cy="150" rx="188" ry="128" className="orbit orbit-outer" vectorEffect="non-scaling-stroke" />
+      <ellipse cx="200" cy="150" rx="132" ry="88" className="orbit orbit-middle" vectorEffect="non-scaling-stroke" />
+      <ellipse cx="200" cy="150" rx="76" ry="50" className="orbit orbit-inner" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
 export default function BubbleGarden({
   tasks,
-  stardust,
-  activeName,
-  users,
+  members,
   activeUser,
-  onRefresh,
+  stats,
+  stardust,
   onAddTask,
-  onConnect,
-  hasCouple,
+  onOpenTask,
+  onTaskCompleted,
+  onOpenDate,
+  onSeeAll,
+  onError,
 }) {
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [completionPromptTask, setCompletionPromptTask] = useState(null);
   const [scope, setScope] = useState("shared");
-  const visibleTasks = tasks.filter((task) => !task.is_completed);
-  const sharedTasks = visibleTasks.filter((task) => !task.is_private);
-  const personalTasks = visibleTasks.filter(
-    (task) =>
-      task.is_private ||
-      task.assigned_to_id === Number(activeUser) ||
-      task.created_by_id === Number(activeUser)
-  );
-  const starfieldTasks = scope === "personal" ? personalTasks : sharedTasks;
-  const fallbackStarfieldTasks = starfieldTasks.length > 0 ? starfieldTasks : visibleTasks;
-  const upcomingTasks = useMemo(() => sortByDueTime(visibleTasks).slice(0, 4), [visibleTasks]);
-  const today = new Date();
-  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index - 3));
-  const firstUser = users[0] || { username: "Mina", id: 1 };
-  const secondUser = users[1] || { username: "Kai", id: 2 };
-  const stardustGoal = 50;
-  const stardustProgress = Math.min(100, Math.round((stardust / stardustGoal) * 100));
-  const relationText = `${firstUser.username} 7/10 ♡ ${secondUser.username} 6/10`;
+  const fieldRef = useRef(null);
+  const size = useElementSize(fieldRef);
+  const me = Number(activeUser);
+  const now = new Date();
+
+  const scopedTasks = useMemo(() => {
+    const list = scope === "personal"
+      ? tasks.filter((task) => task.is_private || task.assigned_to_id === me)
+      : tasks.filter((task) => !task.is_private);
+    const reference = new Date();
+    return [...list].sort((a, b) => importance(b, reference) - importance(a, reference));
+  }, [tasks, scope, me]);
+
+  const isNarrow = size.width < 520;
+  const minBubble = isNarrow ? 98 : 116;
+  const capacity = Math.min(isNarrow ? 9 : 14, bubbleCapacity(size.width, size.height, minBubble));
+  const visibleTasks = scopedTasks.slice(0, capacity);
+  const hiddenCount = scopedTasks.length - visibleTasks.length;
+  const layoutKey = visibleTasks.map((task) => `${task.id}:${task.priority_weight}:${task.due_time}`).join("|");
+
+  const positions = useMemo(() => {
+    const reference = new Date();
+    const placed = layoutBubbles(
+      visibleTasks.map((task) => ({ id: task.id, size: bubbleDiameter(task, reference) })),
+      size.width,
+      size.height,
+      { minSize: minBubble, maxSize: isNarrow ? 188 : 236 }
+    );
+    return new Map(placed.map((spot) => [spot.id, spot]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutKey, size.width, size.height]);
+
+  // Each person's load: bubbles assigned to them, plus shared ones nobody claimed.
+  const loads = members.map((member) => {
+    const carried = tasks.filter((task) => {
+      if (task.is_private) return task.created_by_id === member.id;
+      return task.assigned_to_id ? task.assigned_to_id === member.id : true;
+    });
+    const privateHidden = member.id === me ? 0 : Number(stats?.private_active?.[String(member.id)] || 0);
+    const weight = carried.reduce((sum, task) => sum + (Number(task.priority_weight) || 0), 0) + privateHidden * 50;
+    return {
+      member,
+      count: carried.length,
+      heavy: carried.filter((task) => task.priority_weight >= 80).length,
+      soon: carried.filter((task) => hoursUntil(task, now) < 24).length,
+      privateHidden,
+      percent: Math.min(100, Math.round(weight / 4)),
+    };
+  });
+
+  const upcoming = [...tasks].sort(byDueTime).slice(0, 5);
+  const today = startOfDay(now);
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(today, index));
+  const nextReward = REWARD_PREVIEW.find((item) => item.cost > stardust) || REWARD_PREVIEW[REWARD_PREVIEW.length - 1];
+  const rewardProgress = Math.min(100, Math.round((stardust / nextReward.cost) * 100));
 
   return (
-    <section className="journal-home" aria-label="Sync-Us 首頁">
-      <aside className="today-us-panel" aria-label="今天的我們">
-        <span className="tape tape-teal"></span>
-        <div className="handwritten-title">
-          <h2>今天的我們</h2>
-          <span>快速打個氣吧</span>
+    <div className="home-page">
+      <header className="page-head">
+        <div className="page-title">
+          <span className="kicker">共享星域</span>
+          <h1>看見彼此正在扛的事</h1>
         </div>
-
-        <div className="mood-pair">
-          {[firstUser, secondUser].map((user, index) => (
-            <div className="mood-person" key={user.id}>
+        <div className="page-actions">
+          <div className="segmented" role="tablist" aria-label="星域範圍">
+            {[
+              ["shared", "共享"],
+              ["personal", "我的"],
+            ].map(([value, label]) => (
               <button
+                key={value}
                 type="button"
-                className={`large-avatar avatar-${index + 1} ${Number(activeUser) === user.id ? "active" : ""}`}
-                aria-label={`${user.username} 的今日狀態`}
+                role="tab"
+                aria-selected={scope === value}
+                className={scope === value ? "active" : ""}
+                onClick={() => setScope(value)}
               >
-                <span>{getInitial(user.username)}</span>
+                {label}
               </button>
-              <strong>{user.username}</strong>
-              <span className="mood-score">
-                <Heart size={15} />
-                {index === 0 ? "7/10" : "6/10"}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <div className="care-message">
-          <MessageCircle size={17} />
-          <p>謝謝你昨天幫我處理那麼多事，今晚散步後一起看電影吧 :)</p>
-        </div>
-
-        <div className="week-strip" aria-label="一週日期">
-          {weekDays.map((date, index) => (
-            <button
-              key={date.toISOString()}
-              type="button"
-              className={index === 3 ? "active" : ""}
-              aria-label={`${date.getMonth() + 1} 月 ${date.getDate()} 日，星期${WEEKDAYS[date.getDay()]}`}
-            >
-              <span>{WEEKDAYS[date.getDay()]}</span>
-              <strong>{date.getDate()}</strong>
-            </button>
-          ))}
-        </div>
-
-        <div className="weekly-note">
-          <span>本週小目標</span>
-          <p>一起規劃一次小旅行</p>
-        </div>
-      </aside>
-
-      <main className="shared-starfield-panel" aria-label="共享星域">
-        <div className="starfield-head">
-          <div>
-            <span>共享星域</span>
-            <h2>看見彼此正在扛的事</h2>
+            ))}
           </div>
-          <div className="mobile-scope-tabs" role="tablist" aria-label="星域範圍">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "shared"}
-              className={scope === "shared" ? "active" : ""}
-              onClick={() => setScope("shared")}
-            >
-              共享
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={scope === "personal"}
-              className={scope === "personal" ? "active" : ""}
-              onClick={() => setScope("personal")}
-            >
-              個人
-            </button>
-          </div>
-          <div className="starfield-hint">
-            <Sparkles size={18} />
-            長按泡泡完成，讓壓力變成星塵
-          </div>
-        </div>
-
-        <div className="mobile-starfield-controls" aria-label="手機星域控制">
-          <button className="mobile-relation-strip" type="button" onClick={onConnect}>
-            {relationText}
+          <button type="button" className="btn btn-coral hide-on-mobile" onClick={() => onAddTask()}>
+            <Plus size={19} />
+            新泡泡
           </button>
         </div>
+      </header>
 
-        {!hasCouple ? (
-          <div className="bubble-field journal-starfield empty-starfield">
-            <GalaxyOrbits />
-            <div className="field-empty">
-              <strong>還沒有共享星域</strong>
-              <p>先選一個想一起照顧生活的人。</p>
-              <button className="btn primary" onClick={onConnect}>建立連結</button>
-            </div>
-          </div>
-        ) : (
-          <div className="bubble-field journal-starfield">
-            <GalaxyOrbits />
-            <span className="tiny-star star-a">✦</span>
-            <span className="tiny-star star-b">✧</span>
-            <span className="tiny-star star-c">✦</span>
-            {fallbackStarfieldTasks.length === 0 ? (
-              <div className="field-empty">
-                <p>今天的星域很安靜。</p>
-                <button className="btn primary" onClick={onAddTask}>＋ 新泡泡</button>
+      <div className="home-grid">
+        <section className="card starfield-card" aria-label="泡泡星域">
+          <div className="starfield" ref={fieldRef}>
+            <Orbits />
+            <span className="tiny-star star-a" aria-hidden="true">✦</span>
+            <span className="tiny-star star-b" aria-hidden="true">✧</span>
+            <span className="tiny-star star-c" aria-hidden="true">✦</span>
+
+            {scopedTasks.length === 0 ? (
+              <div className="starfield-empty">
+                <strong>{scope === "personal" ? "你的軌道很安靜" : "今天的星域很安靜"}</strong>
+                <p>{scope === "personal" ? "交給你或私人的泡泡會出現在這裡。" : "放一顆兩個人都要記得的事進來吧。"}</p>
+                <button type="button" className="btn btn-primary" onClick={() => onAddTask()}>
+                  <Plus size={18} />
+                  新泡泡
+                </button>
               </div>
             ) : (
-              <div className="bubble-layer">
-                {fallbackStarfieldTasks.map((task, index) => (
+              visibleTasks.map((task, index) => {
+                const position = positions.get(task.id);
+                if (!position) return null;
+                return (
                   <TaskCard
                     key={task.id}
                     task={task}
-                    activeUser={activeUser}
-                    onRefresh={onRefresh}
-                    onCompleted={(completedTask) => setCompletionPromptTask(completedTask)}
-                    variant="garden"
                     index={index}
-                    onOpenDetails={() => setSelectedTask(task)}
+                    position={position}
+                    members={members}
+                    activeUser={activeUser}
+                    onOpenDetails={onOpenTask}
+                    onCompleted={onTaskCompleted}
+                    onError={onError}
                   />
-                ))}
-              </div>
+                );
+              })
             )}
-            <p className="mobile-galaxy-tip">點一下看細節，長按戳破完成。</p>
           </div>
-        )}
-
-        <button className="new-bubble-cta" type="button" onClick={hasCouple ? onAddTask : onConnect}>
-          <Plus size={22} />
-          新泡泡
-        </button>
-      </main>
-
-      <aside className="life-side-panel" aria-label="生活資訊">
-        <section className="mini-schedule">
-          <span className="paper-clip"></span>
-          <div className="side-title">
-            <CalendarDays size={18} />
-            <h3>近期行程</h3>
-          </div>
-          <div className="mini-week">
-            {weekDays.slice(2, 7).map((date, index) => (
-              <span key={date.toISOString()} className={index === 1 ? "active" : ""}>
-                {date.getDate()}
-              </span>
-            ))}
-          </div>
-          <div className="schedule-list">
-            {upcomingTasks.map((task) => (
-              <button key={task.id} type="button" onClick={() => setSelectedTask(task)}>
-                <i className={task.priority_weight >= 80 ? "hot" : task.priority_weight >= 55 ? "warm" : "cool"}></i>
-                <span>
-                  <strong>{task.title}</strong>
-                  <small>{formatDateTime(task.due_time)}</small>
-                </span>
-                <em>{task.assigned_to_name ? getInitial(task.assigned_to_name) : "雙"}</em>
+          <footer className="starfield-foot">
+            <p>
+              <Sparkles size={16} />
+              點泡泡看細節，長按戳破完成
+            </p>
+            {hiddenCount > 0 && (
+              <button type="button" className="link-btn" onClick={onSeeAll}>
+                還有 {hiddenCount} 顆
+                <ChevronRight size={16} />
               </button>
-            ))}
-            {upcomingTasks.length === 0 && <p className="quiet-empty">沒有近期行程。</p>}
-          </div>
+            )}
+          </footer>
         </section>
 
-        <section className="stardust-bottle">
-          <div className="side-title">
-            <Sparkles size={18} />
-            <h3>我們的星塵瓶</h3>
-          </div>
-          <div className="bottle-illustration" aria-hidden="true">
-            <span className="bottle-cap"></span>
-            <span className="bottle-glass"></span>
-            <span className="bottle-star s1">★</span>
-            <span className="bottle-star s2">✦</span>
-            <span className="bottle-star s3">★</span>
-          </div>
-          <div className="stardust-copy">
-            <strong>{stardust} 顆</strong>
-            <p>再完成幾顆，就能收集星塵。</p>
-            <div className="progress-track">
-              <span style={{ width: `${stardustProgress}%` }}></span>
-            </div>
-            <small>{stardust} / {stardustGoal}</small>
-          </div>
-        </section>
-      </aside>
+        <aside className="home-side">
+          <section className="card us-card" aria-labelledby="us-title">
+            <span className="tape" aria-hidden="true"></span>
+            <h2 id="us-title" className="card-title hand">今天的我們</h2>
+            <ul className="load-list">
+              {loads.map(({ member, count, heavy, soon, privateHidden, percent }) => (
+                <li key={member.id} className="load-row">
+                  <Avatar name={member.username} tone={member.tone} size="lg" active={member.id === me} />
+                  <div className="load-body">
+                    <div className="load-head">
+                      <strong>{member.username}{member.id === me ? "（我）" : ""}</strong>
+                      <span>{count > 0 ? `扛著 ${count} 顆` : "目前很輕鬆"}</span>
+                    </div>
+                    <span className="meter" aria-hidden="true">
+                      <i className={`meter-fill tone-${member.tone}`} style={{ width: `${Math.max(count || privateHidden ? 6 : 0, percent)}%` }}></i>
+                    </span>
+                    <div className="load-tags">
+                      {heavy > 0 && <span className="tag tag-hot">{heavy} 顆很重要</span>}
+                      {soon > 0 && <span className="tag tag-warm">{soon} 顆 24 小時內</span>}
+                      {privateHidden > 0 && (
+                        <span className="tag">
+                          <Lock size={11} />
+                          {privateHidden} 顆私人
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-      {selectedTask && (
-        <div className="detail-sheet" role="dialog" aria-modal="true">
-          <button className="sheet-backdrop" onClick={() => setSelectedTask(null)} aria-label="關閉"></button>
-          <div className="sheet-panel">
-            <button className="sheet-handle" onClick={() => setSelectedTask(null)} aria-label="關閉"></button>
-            <button className="sheet-close" onClick={() => setSelectedTask(null)} aria-label="關閉">×</button>
-            <span className="garden-kicker">{selectedTask.is_private ? "私人軌道" : "共享星域"}</span>
-            <h3>{selectedTask.title}</h3>
-            <p>{formatDateTime(selectedTask.due_time)} · {countdownText(selectedTask.due_time)}</p>
-            {selectedTask.description && <p>{selectedTask.description}</p>}
-            {selectedTask.collaboration_note && <p>{selectedTask.collaboration_note}</p>}
-            {selectedTask.assigned_to_name && <p>交給 {selectedTask.assigned_to_name}</p>}
-            <div className="sheet-meta">
-              <span>重要度 {selectedTask.priority_weight}</span>
-              <span>{selectedTask.created_by_name ? `建立者 ${selectedTask.created_by_name}` : "照顧中"}</span>
+          <section className="card schedule-card" aria-labelledby="schedule-title">
+            <div className="card-head">
+              <h2 id="schedule-title" className="card-title hand">
+                <CalendarDays size={18} />
+                近期行程
+              </h2>
+              <button type="button" className="link-btn" onClick={onSeeAll}>
+                全部
+                <ChevronRight size={16} />
+              </button>
             </div>
-            <p className="pop-hint">回到星域長按這顆泡泡，就能戳破完成。</p>
-          </div>
-        </div>
-      )}
+            <div className="week-dots" aria-label="接下來七天">
+              {weekDays.map((date) => {
+                const count = tasks.filter((task) => isSameDay(parseServerDate(task.due_time), date)).length;
+                return (
+                  <button
+                    key={date.toISOString()}
+                    type="button"
+                    className={isSameDay(date, today) ? "is-today" : ""}
+                    onClick={() => onOpenDate(date)}
+                    aria-label={`${date.getMonth() + 1} 月 ${date.getDate()} 日，${count} 顆泡泡`}
+                  >
+                    <span>{WEEKDAYS[date.getDay()]}</span>
+                    <strong>{date.getDate()}</strong>
+                    <i data-count={Math.min(count, 3)}></i>
+                  </button>
+                );
+              })}
+            </div>
+            <ul className="mini-list">
+              {upcoming.map((task) => (
+                <li key={task.id}>
+                  <button type="button" onClick={() => onOpenTask(task)}>
+                    <i className={`dot tone-${bubbleTone(task.priority_weight)}`} aria-hidden="true"></i>
+                    <span>
+                      <strong>{task.title}</strong>
+                      <small className={isOverdue(task.due_time) ? "is-overdue" : ""}>{formatDateTime(task.due_time)}</small>
+                    </span>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+              {upcoming.length === 0 && <li className="quiet">接下來沒有行程。</li>}
+            </ul>
+          </section>
 
-      <CompletionRecordModal
-        task={completionPromptTask}
-        activeUser={activeUser}
-        onClose={() => setCompletionPromptTask(null)}
-        onSaved={onRefresh}
-      />
-    </section>
+          <section className="card dust-card" aria-labelledby="dust-title">
+            <h2 id="dust-title" className="card-title hand">
+              <Sparkles size={18} />
+              我們的星塵瓶
+            </h2>
+            <div className="dust-body">
+              <div className="jar" aria-hidden="true">
+                <span className="jar-cap"></span>
+                <span className="jar-glass">
+                  <span className="jar-fill" style={{ height: `${Math.max(8, rewardProgress)}%` }}></span>
+                </span>
+              </div>
+              <div className="dust-copy">
+                <strong>{stardust} <small>顆星塵</small></strong>
+                <p>
+                  {stardust >= nextReward.cost
+                    ? "已經可以去商城兌換了！"
+                    : `再 ${nextReward.cost - stardust} 顆就能換「${nextReward.title}」`}
+                </p>
+                <span className="meter" aria-hidden="true">
+                  <i className="meter-fill tone-gold" style={{ width: `${rewardProgress}%` }}></i>
+                </span>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <button type="button" className="fab" onClick={() => onAddTask()} aria-label="新增泡泡">
+        <Plus size={26} />
+      </button>
+    </div>
   );
 }

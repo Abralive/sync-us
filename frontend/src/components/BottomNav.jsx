@@ -1,22 +1,17 @@
-import { CalendarCheck, Gift, HeartHandshake, Home, User } from "lucide-react";
+import { NAV_ITEMS } from "../constants.js";
 
-const NAV_ITEMS = [
-  { key: "home", label: "星域", icon: Home },
-  { key: "partner", label: "連結", icon: HeartHandshake },
-  { key: "tasks", label: "泡泡", icon: CalendarCheck },
-  { key: "shop", label: "商城", icon: Gift },
-  { key: "profile", label: "我的", icon: User },
-];
-
-export default function BottomNav({ activeTab, onTabChange, pendingConfirm = 0 }) {
+export default function BottomNav({ activeTab, onTabChange, lockedTabs }) {
   return (
     <nav className="bottom-nav" aria-label="主要導覽">
       {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
-        <button key={key} className={activeTab === key ? "active" : ""} onClick={() => onTabChange(key)}>
-          <span className="nav-icon-wrap">
-            <Icon size={20} strokeWidth={2.2} />
-            {key === "partner" && pendingConfirm > 0 && <span className="nav-badge">{pendingConfirm}</span>}
-          </span>
+        <button
+          key={key}
+          type="button"
+          className={`${activeTab === key ? "active" : ""}${lockedTabs.has(key) ? " is-locked" : ""}`}
+          aria-current={activeTab === key ? "page" : undefined}
+          onClick={() => onTabChange(key)}
+        >
+          <Icon size={21} strokeWidth={2.1} />
           <span>{label}</span>
         </button>
       ))}

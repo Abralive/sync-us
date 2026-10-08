@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import base64
 import json
 import mimetypes
+import traceback
 
 from . import services
 from .config import AUTH_ENABLED, AUTH_PASSWORD, AUTH_USER, FRONTEND_DIR, FRONTEND_DIST_DIR, INDEX_PATH
@@ -25,6 +26,11 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             return False
         return user == AUTH_USER and password == AUTH_PASSWORD
 
+    def _is_local_request(self) -> bool:
+        """True only for requests made on this computer, not ones forwarded by Cloudflare."""
+        forwarded = any(self.headers.get(name) for name in ("Cf-Connecting-Ip", "X-Forwarded-For", "Cf-Ray"))
+        return not forwarded and self.client_address[0] in {"127.0.0.1", "::1", "localhost"}
+
     def _require_auth(self) -> None:
         body = '{"detail": "需要存取密碼"}'.encode("utf-8")
         self.send_response(401)
@@ -42,6 +48,9 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        self._safely(self._handle_get)
+
+    def _handle_get(self):
         if not self._authorized():
             return self._require_auth()
         parsed = urlparse(self.path)
@@ -62,7 +71,6 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
 
         routes = {
             "/api/v1/health": lambda: services.health(),
-            "/api/v1/users": lambda: services.list_users(),
             "/api/v1/tasks": lambda: services.list_tasks(
                 couple_id=parse_optional_int(query, "couple_id"),
                 user_id=parse_optional_int(query, "user_id"),
@@ -73,12 +81,23 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
                 user_id=parse_optional_int(query, "user_id"),
                 view=query.get("view", ["all"])[0],
             ),
-            "/api/v1/stats": lambda: services.get_stats(parse_optional_int(query, "couple_id") or 1),
+            "/api/v1/stats": lambda: services.get_stats(
+                parse_optional_int(query, "couple_id") or 1,
+                user_id=parse_optional_int(query, "user_id"),
+            ),
             "/api/v1/stardust": lambda: services.get_stardust(parse_optional_int(query, "couple_id") or 1),
         }
 
         if parsed.path in routes:
             self.call_json(routes[parsed.path])
+            return
+
+        if parsed.path == "/api/v1/users":
+            # 完整使用者清單（含 Email）只給本機檢視模式使用，不經由網域公開
+            if self._is_local_request():
+                self.call_json(services.list_users)
+            else:
+                self.send_json({"detail": "Not found"}, 404)
             return
 
         if parsed.path.startswith("/api/v1/couple-invites/user/"):
@@ -97,6 +116,9 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
                     include_pending=query.get("include_pending", ["1"])[0] != "0",
                 )
             )
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/rewards"):
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(lambda: services.list_rewards(couple_id, parse_required_int(query, "user_id")))
         elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/footprints"):
             couple_id = segment_id(parsed.path, 4)
             self.call_json(lambda: services.list_footprints(couple_id, parse_required_int(query, "user_id")))
@@ -105,11 +127,14 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/v1/couples/"):
             self.call_json(lambda: services.get_couple(path_id(parsed.path)))
         elif parsed.path.startswith("/api/v1/tasks/"):
-            self.call_json(lambda: services.get_task(path_id(parsed.path)))
+            self.call_json(lambda: services.get_task(path_id(parsed.path), parse_optional_int(query, "user_id")))
         else:
             self.send_json({"detail": "Not found"}, 404)
 
     def do_POST(self):
+        self._safely(self._handle_post)
+
+    def _handle_post(self):
         if not self._authorized():
             return self._require_auth()
         parsed = urlparse(self.path)
@@ -117,8 +142,8 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.call_json(lambda: services.create_task(self.read_json()), 201)
         elif parsed.path == "/api/v1/users":
             self.call_json(lambda: services.create_user(self.read_json()), 201)
-        elif parsed.path == "/api/v1/couples":
-            self.call_json(lambda: services.create_couple(self.read_json()), 201)
+        elif parsed.path == "/api/v1/auth/login":
+            self.call_json(lambda: services.login_user(self.read_json()))
         elif parsed.path == "/api/v1/couple-invites":
             self.call_json(lambda: services.create_couple_invite(self.read_json()), 201)
         elif parsed.path.startswith("/api/v1/couple-invites/") and parsed.path.endswith("/accept"):
@@ -127,6 +152,10 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         elif parsed.path.startswith("/api/v1/couple-invites/") and parsed.path.endswith("/decline"):
             body = self.read_json()
             self.call_json(lambda: services.decline_couple_invite(action_text(parsed.path), body))
+        elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/rewards"):
+            body = self.read_json()
+            couple_id = segment_id(parsed.path, 4)
+            self.call_json(lambda: services.redeem_reward(couple_id, body.get("user_id"), body.get("item_key")), 201)
         elif parsed.path.startswith("/api/v1/couples/") and parsed.path.endswith("/manual/query"):
             body = self.read_json()
             couple_id = segment_id(parsed.path, 4)
@@ -151,22 +180,48 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"detail": "Not found"}, 404)
 
     def do_PUT(self):
+        self._safely(self._handle_put)
+
+    def _handle_put(self):
         if not self._authorized():
             return self._require_auth()
         parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
         if parsed.path.startswith("/api/v1/tasks/"):
-            self.call_json(lambda: services.update_task(path_id(parsed.path), self.read_json()))
+            body = self.read_json()
+            user_id = parse_optional_int(query, "user_id") or body.get("user_id")
+            self.call_json(lambda: services.update_task(path_id(parsed.path), body, user_id))
         else:
             self.send_json({"detail": "Not found"}, 404)
 
     def do_DELETE(self):
+        self._safely(self._handle_delete)
+
+    def _handle_delete(self):
         if not self._authorized():
             return self._require_auth()
         parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
         if parsed.path.startswith("/api/v1/tasks/"):
-            self.call_json(lambda: services.delete_task(path_id(parsed.path)))
+            self.call_json(
+                lambda: services.delete_task(path_id(parsed.path), parse_optional_int(query, "user_id"))
+            )
         else:
             self.send_json({"detail": "Not found"}, 404)
+
+    def _safely(self, handler):
+        """Malformed paths or bodies get a JSON error instead of a dropped connection."""
+        try:
+            handler()
+        except services.NotFoundError as exc:
+            self.send_json({"detail": str(exc)}, 404)
+        except (KeyError, ValueError, TypeError, IndexError) as exc:
+            self.send_json({"detail": f"資料格式不正確：{exc}"}, 400)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            self.send_json({"detail": "伺服器暫時出了點問題，請稍後再試"}, 500)
 
     def call_json(self, callback, success_status=200):
         try:
@@ -178,7 +233,10 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         except services.ValidationError as exc:
             self.send_json({"detail": str(exc)}, 400)
         except (KeyError, ValueError, TypeError) as exc:
-            self.send_json({"detail": f"Invalid request: {exc}"}, 400)
+            self.send_json({"detail": f"資料格式不正確：{exc}"}, 400)
+        except Exception:  # noqa: BLE001 - keep the server alive and answer with JSON
+            traceback.print_exc()
+            self.send_json({"detail": "伺服器暫時出了點問題，請稍後再試"}, 500)
 
     def read_json(self) -> dict:
         size = int(self.headers.get("Content-Length", "0"))
@@ -189,14 +247,19 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def send_file(self, path, content_type):
+    def send_file(self, path, content_type, cache_control="no-cache"):
         body = path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", content_type)
+        # index.html 每次重新驗證，避免更新後手機還看到舊版；帶 hash 的 assets 可以長期快取
+        self.send_header("Cache-Control", cache_control)
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -211,7 +274,8 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         if target.suffix in {".css", ".js", ".jsx"}:
             content_type = f"{content_type}; charset=utf-8"
-        self.send_file(target, content_type)
+        cache_control = "public, max-age=31536000, immutable" if root == FRONTEND_DIST_DIR.resolve() else "no-cache"
+        self.send_file(target, content_type, cache_control)
 
 
 def parse_optional_int(query: dict, key: str) -> int | None:

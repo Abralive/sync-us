@@ -3,16 +3,18 @@ import {
   CalendarHeart,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
+  Copy,
   Link2,
   Plus,
   Search,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
-import { formatDateTime } from "../utils/date.js";
+import { daysSince, formatDateTime, shortDate } from "../utils/date.js";
+import Avatar, { AvatarPair } from "./Avatar.jsx";
+import Modal from "./Modal.jsx";
 
 const CATEGORY_ORDER = [
   ["basic", "基本資訊"],
@@ -23,75 +25,458 @@ const CATEGORY_ORDER = [
   ["memo", "其他備忘"],
 ];
 
-function initial(name) {
-  return name?.trim()?.slice(0, 1) || "?";
+function PairingPage({ activeUser, onConnected }) {
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const me = Number(activeUser);
+
+  async function loadInvites() {
+    try {
+      const result = await request(`/couple-invites/user/${me}`);
+      setInvites(result.sent_or_received || []);
+    } catch {
+      setInvites([]);
+    }
+  }
+
+  useEffect(() => {
+    loadInvites();
+    const timer = window.setInterval(loadInvites, 5000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
+
+  async function run(action) {
+    setLoading(true);
+    setError("");
+    setStatus("");
+    try {
+      await action();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const sentInvites = invites.filter((invite) => invite.inviter_id === me && invite.status === "pending");
+  const receivedInvites = invites.filter((invite) => invite.inviter_id !== me && invite.status === "pending");
+  const visibleCode = inviteCode || sentInvites[0]?.invite_code || "";
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(visibleCode);
+      setStatus("邀請碼已複製，傳給對方吧。");
+    } catch {
+      setStatus("無法自動複製，請長按邀請碼手動複製。");
+    }
+  }
+
+  return (
+    <div className="partner-page">
+      <header className="page-head">
+        <div className="page-title">
+          <span className="kicker">連結</span>
+          <h1>先把兩個人放進同一個星域</h1>
+          <p className="page-sub">完成連結後，才會打開共享星域、共同泡泡、共同足跡與對方的小手冊。</p>
+        </div>
+      </header>
+
+      <div className="pair-grid">
+        <section className="card pair-card">
+          <span className="step-badge">方法一</span>
+          <h2>產生邀請碼給對方</h2>
+          <p>不用填對方 Email，把邀請碼傳給對方輸入就好，7 天內有效。</p>
+          {visibleCode ? (
+            <div className="invite-code">
+              <span>你的邀請碼</span>
+              <strong>{visibleCode}</strong>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={copyCode}>
+                <Copy size={16} />
+                複製
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={loading}
+              onClick={() => run(async () => {
+                const invite = await request("/couple-invites", {
+                  method: "POST",
+                  body: JSON.stringify({ inviter_id: me, invitee_email: "" }),
+                });
+                setInviteCode(invite.invite_code);
+                setStatus("邀請碼已建立，請把它傳給對方。");
+                await loadInvites();
+              })}
+            >
+              <Link2 size={18} />
+              產生邀請碼
+            </button>
+          )}
+        </section>
+
+        <form
+          className="card pair-card"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!joinCode.trim()) {
+              setError("請輸入對方給你的邀請碼。");
+              return;
+            }
+            run(async () => {
+              await request(`/couple-invites/${encodeURIComponent(joinCode.trim().toUpperCase())}/accept`, {
+                method: "POST",
+                body: JSON.stringify({ user_id: me }),
+              });
+              await onConnected();
+            });
+          }}
+        >
+          <span className="step-badge">方法二</span>
+          <h2>輸入對方給你的邀請碼</h2>
+          <p>對方已經建立邀請的話，貼上代碼就能正式成為一組。</p>
+          <label className="field">
+            <span>邀請碼</span>
+            <input
+              value={joinCode}
+              onChange={(event) => setJoinCode(event.target.value)}
+              placeholder="SYNC-XXXX"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <button className="btn btn-primary" disabled={loading} type="submit">
+            <ShieldCheck size={18} />
+            接受連結
+          </button>
+        </form>
+      </div>
+
+      {receivedInvites.length > 0 && (
+        <section className="card invite-list">
+          <h2 className="card-title">收到的邀請</h2>
+          {receivedInvites.map((invite) => (
+            <article key={invite.id}>
+              <div>
+                <strong>{invite.inviter_name || "對方"} 想和你建立連結</strong>
+                <span>{invite.invite_code}</span>
+              </div>
+              <div className="btn-row">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={loading}
+                  onClick={() => run(async () => {
+                    await request(`/couple-invites/${invite.invite_code}/decline`, { method: "POST", body: JSON.stringify({ user_id: me }) });
+                    await loadInvites();
+                  })}
+                >
+                  拒絕
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={loading}
+                  onClick={() => run(async () => {
+                    await request(`/couple-invites/${invite.invite_code}/accept`, { method: "POST", body: JSON.stringify({ user_id: me }) });
+                    await onConnected();
+                  })}
+                >
+                  接受
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {sentInvites.length > 0 && (
+        <section className="card invite-list is-muted">
+          <h2 className="card-title">等待對方接受</h2>
+          {sentInvites.map((invite) => (
+            <article key={invite.id}>
+              <div>
+                <strong>{invite.invite_code}</strong>
+                <span>{invite.invitee_email ? `已指定 ${invite.invitee_email}` : "對方輸入這組代碼後就會完成連結"}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={loading}
+                onClick={() => run(async () => {
+                  await request(`/couple-invites/${invite.invite_code}/decline`, { method: "POST", body: JSON.stringify({ user_id: me }) });
+                  setInviteCode("");
+                  await loadInvites();
+                })}
+              >
+                取消邀請
+              </button>
+            </article>
+          ))}
+        </section>
+      )}
+
+      <p className="privacy-note">
+        <ShieldCheck size={16} />
+        連結完成前不會共享任何泡泡、手冊或足跡；私人泡泡在連結後也只有你看得到。
+      </p>
+
+      {(error || status) && (
+        <div className={error ? "form-error" : "form-success"} role={error ? "alert" : "status"}>{error || status}</div>
+      )}
+    </div>
+  );
 }
 
-function shortDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+function ManualPanel({ partner, me, couple, activeUser, manualData, manualRequired, onSaved, onError }) {
+  const [formCategory, setFormCategory] = useState(manualRequired ? "likes" : "");
+  const [saving, setSaving] = useState(false);
+  const entries = manualData.entries || [];
+  const filled = CATEGORY_ORDER
+    .map(([key, label]) => ({ key, label, entries: entries.filter((entry) => entry.category === key) }))
+    .filter((group) => group.entries.length > 0);
+  const missing = CATEGORY_ORDER.filter(([key]) => !entries.some((entry) => entry.category === key));
+
+  useEffect(() => {
+    if (manualRequired) setFormCategory((value) => value || "likes");
+  }, [manualRequired]);
+
+  async function saveEntry(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    setSaving(true);
+    try {
+      await request(`/couples/${couple.id}/manual`, {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: Number(activeUser),
+          subject_user_id: partner.id,
+          category: formCategory,
+          label: form.get("label"),
+          value: form.get("value"),
+          source_type: "manual",
+          status: "confirmed",
+        }),
+      });
+      formElement.reset();
+      setFormCategory("");
+      await onSaved("已寫進小手冊");
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmEntry(entryId) {
+    try {
+      await request(`/manual/${entryId}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: Number(activeUser) }),
+      });
+      await onSaved("已確認這筆資料");
+    } catch (err) {
+      onError(err.message);
+    }
+  }
+
+  return (
+    <section className="manual-panel" aria-labelledby="manual-title">
+      <div className="section-head">
+        <div>
+          <span className="kicker">About {partner?.username}</span>
+          <h2 id="manual-title">{partner?.username} 的小手冊</h2>
+        </div>
+        {!formCategory && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFormCategory("likes")}>
+            <Plus size={17} />
+            新增資料
+          </button>
+        )}
+      </div>
+
+      {manualRequired && (
+        <div className="callout">
+          <Sparkles size={18} />
+          <p>
+            <strong>先替 {partner?.username} 寫下一件事</strong>
+            寫完第一則小手冊，就會打開星域、泡泡和商城。可以從喜歡的飲料、過敏或相處提醒開始。
+          </p>
+        </div>
+      )}
+
+      {formCategory && (
+        <form className="card manual-form" onSubmit={saveEntry}>
+          <fieldset className="field">
+            <legend>分類</legend>
+            <div className="chip-row">
+              {CATEGORY_ORDER.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`chip${formCategory === key ? " active" : ""}`}
+                  aria-pressed={formCategory === key}
+                  onClick={() => setFormCategory(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <div className="field-pair">
+            <label className="field">
+              <span>標籤</span>
+              <input name="label" maxLength={40} placeholder="例如：喜歡的飲料" required />
+            </label>
+            <label className="field">
+              <span>內容</span>
+              <input name="value" maxLength={160} placeholder="例如：無糖綠茶、少冰" required />
+            </label>
+          </div>
+          <div className="btn-row btn-row-end">
+            {!manualRequired && (
+              <button type="button" className="btn btn-ghost" onClick={() => setFormCategory("")}>
+                取消
+              </button>
+            )}
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving ? "寫入中..." : "寫入手冊"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {filled.length > 0 ? (
+        <div className="manual-grid">
+          {filled.map((group) => (
+            <section key={group.key} className="card manual-card">
+              <h3>{group.label}</h3>
+              <ul>
+                {group.entries.map((entry) => (
+                  <li key={entry.id} className={entry.status === "pending" ? "is-pending" : ""}>
+                    <strong>{entry.label}</strong>
+                    <span>{entry.value}</span>
+                    <small>
+                      {entry.status_label}・{entry.created_by_name || "共同手冊"}・{shortDate(entry.updated_at)}
+                    </small>
+                    {entry.status === "pending" && (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => confirmEntry(entry.id)}>
+                        <CheckCircle2 size={16} />
+                        確認
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      ) : (
+        !manualRequired && (
+          <div className="empty-card">
+            <ShieldCheck size={24} />
+            <strong>還沒有手冊資料</strong>
+            <p>記下過敏、喜歡的東西或相處提醒，之後可以直接問 Sync。</p>
+          </div>
+        )
+      )}
+
+      {missing.length > 0 && filled.length > 0 && (
+        <div className="missing-row">
+          <span>還沒寫：</span>
+          {missing.map(([key, label]) => (
+            <button key={key} type="button" className="chip chip-quiet" onClick={() => setFormCategory(key)}>
+              <Plus size={14} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="footnote">這本手冊只會在 {me?.username || "你"} 和 {partner?.username || "對方"} 的連結中顯示。</p>
+    </section>
+  );
 }
 
-function daysTogether(couple) {
-  const start = new Date(couple?.created_at || Date.now());
-  const diff = Date.now() - start.getTime();
-  return Math.max(1, Math.floor(diff / 86400000) + 1);
+function FootprintPanel({ footprints, onOpen }) {
+  return (
+    <section className="footprint-panel" aria-labelledby="footprint-title">
+      <div className="section-head">
+        <div>
+          <span className="kicker">Our Journey</span>
+          <h2 id="footprint-title">共同足跡</h2>
+        </div>
+        <span className="count-pill">{footprints.length} 則</span>
+      </div>
+
+      {footprints.length === 0 ? (
+        <div className="empty-card">
+          <Sparkles size={24} />
+          <strong>還沒有共同足跡</strong>
+          <p>完成第一顆共享泡泡後，這裡會自動留下紀錄。</p>
+        </div>
+      ) : (
+        <ol className="footprint-grid">
+          {footprints.map((item) => (
+            <li key={item.id} className="card footprint-card">
+              <span className="paper-tape" aria-hidden="true"></span>
+              <div className="footprint-date">
+                <strong>{shortDate(item.completed_at)}</strong>
+                <span>完成泡泡</span>
+              </div>
+              <h3>{item.task_title}</h3>
+              {item.photo_data_url && <img src={item.photo_data_url} alt={`${item.task_title} 的共同足跡`} loading="lazy" />}
+              <p>{item.note || "沒有留下文字，保留完成這件事的紀錄。"}</p>
+              <footer>
+                <span className="avatar-pair">
+                  {(item.participants || []).slice(0, 2).map((person, index) => (
+                    <Avatar key={person.id} name={person.name} tone={index + 1} size="xs" />
+                  ))}
+                </span>
+                <button type="button" className="link-btn" onClick={() => onOpen(item)}>
+                  原泡泡
+                  <ChevronRight size={16} />
+                </button>
+              </footer>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
 }
 
 export default function CoupleConnect({
-  users,
-  activeUser,
+  me,
+  partner,
+  members,
   couple,
-  completed = [],
+  activeUser,
+  manualRequired,
   onRefresh,
   onConnected,
+  showToast,
 }) {
-  const [selectedPartner, setSelectedPartner] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [activePanel, setActivePanel] = useState("manual");
-  const [manualData, setManualData] = useState({ entries: [], categories: {} });
+  const [manualData, setManualData] = useState({ entries: [] });
   const [footprints, setFootprints] = useState([]);
   const [query, setQuery] = useState("");
   const [queryResult, setQueryResult] = useState(null);
-  const [manualFormOpen, setManualFormOpen] = useState(false);
   const [footprintDetail, setFootprintDetail] = useState(null);
   const [loadState, setLoadState] = useState("idle");
-  const [inviteCode, setInviteCode] = useState("");
-  const [joinCode, setJoinCode] = useState("");
-  const [inviteStatus, setInviteStatus] = useState("");
-  const [pendingInvites, setPendingInvites] = useState([]);
-
-  const activeUserData = useMemo(
-    () => users.find((user) => user.id === Number(activeUser)),
-    [users, activeUser]
-  );
-  const partnerOptions = users.filter((user) => user.id !== Number(activeUser));
-  const partner = useMemo(() => {
-    if (!couple) return null;
-    const partnerId = couple.partner_a_id === Number(activeUser) ? couple.partner_b_id : couple.partner_a_id;
-    const partnerName = couple.partner_a_id === Number(activeUser) ? couple.partner_b_name : couple.partner_a_name;
-    return users.find((user) => user.id === partnerId) || { id: partnerId, username: partnerName };
-  }, [couple, users, activeUser]);
-
-  const totalManual = manualData.entries?.length || 0;
-  const totalRecords = totalManual + footprints.length;
-
-  useEffect(() => {
-    if (!couple) return;
-    loadConnectionData();
-  }, [couple?.id, activeUser]);
-
-  useEffect(() => {
-    if (couple || !activeUser) return;
-    loadInvites();
-  }, [couple?.id, activeUser]);
+  const [error, setError] = useState("");
 
   async function loadConnectionData() {
-    setLoadState("loading");
-    setError("");
+    if (!couple) return;
+    setLoadState((state) => (state === "ready" ? state : "loading"));
     try {
       const [manual, timeline] = await Promise.all([
         request(`/couples/${couple.id}/manual?user_id=${activeUser}`),
@@ -100,132 +485,20 @@ export default function CoupleConnect({
       setManualData(manual);
       setFootprints(timeline);
       setLoadState("ready");
+      setError("");
     } catch (err) {
       setError(err.message);
       setLoadState("error");
     }
   }
 
-  async function connectPartner(event) {
-    event.preventDefault();
-    if (!selectedPartner) {
-      setError("請選擇要連結的使用者。");
-      return;
-    }
+  useEffect(() => {
+    loadConnectionData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couple?.id, activeUser]);
 
-    setLoading(true);
-    setError("");
-    try {
-      const created = await request("/couples", {
-        method: "POST",
-        body: JSON.stringify({
-          partner_a_id: Number(activeUser),
-          partner_b_id: Number(selectedPartner),
-        }),
-      });
-      await onConnected(created.id);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadInvites() {
-    try {
-      const result = await request(`/couple-invites/user/${activeUser}`);
-      setPendingInvites(result.sent_or_received || []);
-    } catch {
-      setPendingInvites([]);
-    }
-  }
-
-  async function createInvite(event) {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-    setInviteStatus("");
-    try {
-      const invite = await request("/couple-invites", {
-        method: "POST",
-        body: JSON.stringify({
-          inviter_id: Number(activeUser),
-          invitee_email: "",
-        }),
-      });
-      setInviteCode(invite.invite_code);
-      setInviteStatus("邀請碼已建立，請把它傳給對方。");
-      await loadInvites();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function copyInviteCode() {
-    if (!inviteCode) return;
-    try {
-      await navigator.clipboard.writeText(inviteCode);
-      setInviteStatus("邀請碼已複製。");
-    } catch {
-      setInviteStatus("無法自動複製，請手動複製邀請碼。");
-    }
-  }
-
-  async function acceptInvite(event) {
-    event.preventDefault();
-    if (!joinCode.trim()) {
-      setError("請輸入對方給你的邀請碼。");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setInviteStatus("");
-    try {
-      const created = await request(`/couple-invites/${joinCode.trim().toUpperCase()}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: Number(activeUser) }),
-      });
-      setInviteStatus("連結完成。");
-      await onConnected(created.id);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function acceptReceivedInvite(code) {
-    setLoading(true);
-    setError("");
-    try {
-      const created = await request(`/couple-invites/${code}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: Number(activeUser) }),
-      });
-      await onConnected(created.id);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function declineInvite(code) {
-    setLoading(true);
-    setError("");
-    try {
-      await request(`/couple-invites/${code}/decline`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: Number(activeUser) }),
-      });
-      await loadInvites();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  if (!couple) {
+    return <PairingPage activeUser={activeUser} onConnected={onConnected} />;
   }
 
   async function askSync(event) {
@@ -235,7 +508,7 @@ export default function CoupleConnect({
     try {
       const result = await request(`/couples/${couple.id}/manual/query`, {
         method: "POST",
-        body: JSON.stringify({ user_id: activeUser, query }),
+        body: JSON.stringify({ user_id: Number(activeUser), query }),
       });
       setQueryResult(result);
     } catch (err) {
@@ -243,433 +516,114 @@ export default function CoupleConnect({
     }
   }
 
-  async function saveManualEntry(event) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    try {
-      await request(`/couples/${couple.id}/manual`, {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: activeUser,
-          subject_user_id: Number(form.get("subject_user_id")),
-          category: form.get("category"),
-          label: form.get("label"),
-          value: form.get("value"),
-          source_type: "manual",
-          status: "confirmed",
-        }),
-      });
-      event.currentTarget.reset();
-      setManualFormOpen(false);
-      await loadConnectionData();
-      onRefresh?.();
-    } catch (err) {
-      setError(err.message);
-    }
+  async function handleSaved(message) {
+    await loadConnectionData();
+    onRefresh?.();
+    showToast?.(message);
   }
 
-  async function confirmEntry(entryId) {
-    try {
-      await request(`/manual/${entryId}/confirm`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: activeUser }),
-      });
-      await loadConnectionData();
-      onRefresh?.();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  if (!couple) {
-    const sentInvites = pendingInvites.filter((invite) => invite.inviter_id === Number(activeUser) && invite.status === "pending");
-    const receivedInvites = pendingInvites.filter((invite) => invite.inviter_id !== Number(activeUser) && invite.status === "pending");
-    const visibleInviteCode = inviteCode || sentInvites[0]?.invite_code || "";
-
-    return (
-      <section className="manual-page no-pair">
-        <div className="manual-topline">
-          <span className="sync-logo-mini" aria-hidden="true"></span>
-          <strong>Sync-Us</strong>
-        </div>
-
-        <div className="manual-page-title">
-          <span>連結</span>
-          <h2>先把兩個人綁在同一個共享空間</h2>
-          <p>完成連結後，才會開啟共享星域、共同泡泡、共同足跡與對方的小手冊。</p>
-        </div>
-
-        <div className="pair-choice-grid">
-          <form className="pair-invite-panel" onSubmit={createInvite}>
-            <div>
-              <span className="manual-eyebrow">方法一</span>
-              <h3>產生邀請碼給對方</h3>
-              <p>不用先填對方 Email，把邀請碼傳給對方輸入就能連結。</p>
-            </div>
-            <button className="btn primary" disabled={loading} type="submit">
-              <Link2 size={18} />
-              {visibleInviteCode ? "重新顯示邀請碼" : "產生邀請碼"}
-            </button>
-            {visibleInviteCode && (
-              <div className="invite-code-card">
-                <span>你的邀請碼</span>
-                <strong>{visibleInviteCode}</strong>
-                <button type="button" onClick={copyInviteCode}>複製</button>
-              </div>
-            )}
-          </form>
-
-          <form className="pair-invite-panel" onSubmit={acceptInvite}>
-            <div>
-              <span className="manual-eyebrow">方法二</span>
-              <h3>輸入對方給你的邀請碼</h3>
-              <p>如果對方已經建立邀請，貼上代碼後你們會正式成為一組。</p>
-            </div>
-            <label>
-              邀請碼
-              <input
-                value={joinCode}
-                onChange={(event) => setJoinCode(event.target.value)}
-                placeholder="SYNC-XXXX"
-                inputMode="text"
-              />
-            </label>
-            <button className="btn primary" disabled={loading} type="submit">
-              <ShieldCheck size={18} />
-              接受連結
-            </button>
-          </form>
-        </div>
-
-        {receivedInvites.length > 0 && (
-          <section className="pair-pending-list">
-            <h3>收到的邀請</h3>
-            {receivedInvites.map((invite) => (
-              <article key={invite.id}>
-                <div>
-                  <strong>{invite.inviter_name || "對方"} 想和你建立 Sync-Us 連結</strong>
-                  <span>{invite.invite_code}</span>
-                </div>
-                <button type="button" onClick={() => acceptReceivedInvite(invite.invite_code)} disabled={loading}>接受</button>
-                <button type="button" onClick={() => declineInvite(invite.invite_code)} disabled={loading}>拒絕</button>
-              </article>
-            ))}
-          </section>
-        )}
-
-        {sentInvites.length > 0 && (
-          <section className="pair-pending-list muted">
-            <h3>等待對方接受</h3>
-            {sentInvites.map((invite) => (
-              <article key={invite.id}>
-                <div>
-                  <strong>{invite.invite_code}</strong>
-                  <span>{invite.invitee_email ? `已指定 ${invite.invitee_email}` : "任何登入者輸入此碼後可送出接受"}</span>
-                </div>
-                <button type="button" onClick={() => declineInvite(invite.invite_code)} disabled={loading}>取消</button>
-              </article>
-            ))}
-          </section>
-        )}
-
-        <div className="pair-privacy-note">
-          連結完成前不會共享私人泡泡、手冊資料或共同足跡。連結完成後，共享泡泡才會出現在你們兩個人的星域中。
-        </div>
-
-        {(error || inviteStatus) && (
-          <div className={error ? "manual-error" : "manual-success"}>{error || inviteStatus}</div>
-        )}
-      </section>
-    );
-  }
-
-  if (!couple) {
-    return (
-      <section className="manual-page no-pair">
-        <div className="manual-topline">
-          <span className="sync-logo-mini" aria-hidden="true"></span>
-          <strong>Sync-Us</strong>
-        </div>
-        <div className="manual-page-title">
-          <span>連結</span>
-          <h2>先選一個想一起照顧生活的人</h2>
-          <p>連結後，共享泡泡與共同足跡會放在同一本手冊裡。</p>
-        </div>
-        <form className="pair-invite-panel" onSubmit={connectPartner}>
-          <label>
-            想跟誰綁定？
-            <select value={selectedPartner} onChange={(event) => setSelectedPartner(event.target.value)}>
-              <option value="">選擇使用者</option>
-              {partnerOptions.map((user) => (
-                <option key={user.id} value={user.id}>{user.username} · {user.email}</option>
-              ))}
-            </select>
-          </label>
-          {error && <div className="manual-error">{error}</div>}
-          <button className="btn primary" disabled={loading}>
-            <Link2 size={18} />
-            {loading ? "連結中..." : "建立連結"}
-          </button>
-        </form>
-      </section>
-    );
-  }
+  const totalRecords = (manualData.entries?.length || 0) + footprints.length;
 
   return (
-    <section className="manual-page" aria-label="共同手冊">
-      <div className="manual-topline">
-        <span className="sync-logo-mini" aria-hidden="true"></span>
-        <strong>Sync-Us</strong>
-        <span className="manual-avatar">{initial(activeUserData?.username)}</span>
-        <span className="manual-avatar partner">{initial(partner?.username)}</span>
-      </div>
-
-      <header className="manual-page-title">
-        <span>連結</span>
-        <h2>一本會慢慢長大的共同手冊</h2>
-        <p>一起走過 {daysTogether(couple)} 天・累積 {totalRecords} 則</p>
+    <div className="partner-page">
+      <header className="page-head">
+        <div className="page-title">
+          <span className="kicker">連結</span>
+          <h1>一本會慢慢長大的共同手冊</h1>
+          <p className="page-sub">一起走過 {daysSince(couple.created_at)} 天・累積 {totalRecords} 則</p>
+        </div>
+        <div className="page-actions">
+          <AvatarPair members={members} size="lg" />
+        </div>
       </header>
 
-      <form className="ask-sync-bar" onSubmit={askSync}>
-        <Search size={22} />
-        <label>
-          問問 Sync
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="對方對什麼過敏？"
-          />
-        </label>
-        <button type="submit">
-          <CircleHelp size={19} />
-          查詢
-        </button>
-      </form>
+      <div className="partner-layout">
+        <div className="partner-main">
+          <form className="card ask-bar" onSubmit={askSync} role="search">
+            <Search size={20} aria-hidden="true" />
+            <label className="ask-field">
+              <span>問問 Sync</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={`${partner?.username || "對方"} 對什麼過敏？`}
+                enterKeyHint="search"
+              />
+            </label>
+            <button type="submit" className="btn btn-primary btn-sm">查詢</button>
+          </form>
 
-      {queryResult && (
-        <section className="sync-answer" aria-live="polite">
-          <strong>{queryResult.loading ? "查詢中..." : queryResult.answer}</strong>
-          {!queryResult.loading && (
-            <div>
-              {queryResult.sources?.length > 0 ? (
-                queryResult.sources.map((source) => (
-                  <span key={`${source.label}-${source.updated_at}`}>
-                    來源：{source.source} · {source.label} · 更新於 {shortDate(source.updated_at)}
-                  </span>
-                ))
-              ) : (
-                <span>只查詢已確認資料；沒有資料時不推測。</span>
+          {queryResult && (
+            <section className="card sync-answer" aria-live="polite">
+              <strong>{queryResult.loading ? "查詢中..." : queryResult.answer}</strong>
+              {!queryResult.loading && (
+                <small>
+                  {queryResult.sources?.length > 0
+                    ? queryResult.sources.map((source) => `${source.label}（更新於 ${shortDate(source.updated_at)}）`).join("、")
+                    : "只查詢已確認的手冊資料，沒有資料時不推測。"}
+                </small>
               )}
-            </div>
+            </section>
           )}
-        </section>
-      )}
 
-      <nav className="manual-tabs" aria-label="連結分頁">
-        <button type="button" className={activePanel === "manual" ? "active" : ""} onClick={() => setActivePanel("manual")}>
-          <BookOpen size={18} />
-          對方的小手冊
-        </button>
-        <button type="button" className={activePanel === "timeline" ? "active" : ""} onClick={() => setActivePanel("timeline")}>
-          <CalendarHeart size={18} />
-          共同足跡
-        </button>
-      </nav>
+          <div className="segmented segmented-wide tab-switch" role="tablist" aria-label="連結分頁">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activePanel === "manual"}
+              className={activePanel === "manual" ? "active" : ""}
+              onClick={() => setActivePanel("manual")}
+            >
+              <BookOpen size={17} />
+              對方的小手冊
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activePanel === "timeline"}
+              className={activePanel === "timeline" ? "active" : ""}
+              onClick={() => setActivePanel("timeline")}
+            >
+              <CalendarHeart size={17} />
+              共同足跡
+            </button>
+          </div>
 
-      {error && <div className="manual-error">{error}</div>}
-      {loadState === "loading" && <p className="manual-muted">正在翻開手冊...</p>}
+          {error && <div className="form-error" role="alert">{error}</div>}
+          {loadState === "loading" && <p className="quiet">正在翻開手冊...</p>}
 
-      {activePanel === "manual" ? (
-        <ManualPanel
-          partner={partner}
-          activeUserData={activeUserData}
-          manualData={manualData}
-          manualFormOpen={manualFormOpen}
-          setManualFormOpen={setManualFormOpen}
-          saveManualEntry={saveManualEntry}
-          confirmEntry={confirmEntry}
-        />
-      ) : (
-        <FootprintPanel
-          footprints={footprints}
-          completed={completed}
-          onOpenOriginal={setFootprintDetail}
-        />
-      )}
+          {activePanel === "manual" ? (
+            <ManualPanel
+              partner={partner}
+              me={me}
+              couple={couple}
+              activeUser={activeUser}
+              manualData={manualData}
+              manualRequired={manualRequired}
+              onSaved={handleSaved}
+              onError={setError}
+            />
+          ) : (
+            <FootprintPanel footprints={footprints} onOpen={setFootprintDetail} />
+          )}
+        </div>
+      </div>
 
       {footprintDetail && (
-        <div className="detail-sheet" role="dialog" aria-modal="true">
-          <button className="sheet-backdrop" type="button" onClick={() => setFootprintDetail(null)} aria-label="關閉"></button>
-          <section className="sheet-panel original-bubble-panel">
-            <button className="sheet-close" type="button" onClick={() => setFootprintDetail(null)} aria-label="關閉">×</button>
-            <span className="manual-eyebrow">原泡泡 #{footprintDetail.bubble_id}</span>
-            <h3>{footprintDetail.task_title}</h3>
-            <p>{footprintDetail.original_task?.description || "沒有補充描述。"}</p>
-            <div className="sheet-meta">
-              <span>完成於 {formatDateTime(footprintDetail.completed_at)}</span>
-              <span>建立者 {footprintDetail.created_by_name || "Sync"}</span>
+        <Modal kicker={`原泡泡 #${footprintDetail.bubble_id}`} title={footprintDetail.task_title} onClose={() => setFootprintDetail(null)} size="sm">
+          <p className="modal-lead">{footprintDetail.original_task?.description || "沒有補充描述。"}</p>
+          <dl className="detail-list">
+            <div className="detail-row">
+              <dt>完成</dt>
+              <dd><strong>{formatDateTime(footprintDetail.completed_at)}</strong></dd>
             </div>
-          </section>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ManualPanel({
-  partner,
-  activeUserData,
-  manualData,
-  manualFormOpen,
-  setManualFormOpen,
-  saveManualEntry,
-  confirmEntry,
-}) {
-  const [draftCategory, setDraftCategory] = useState("health");
-  const grouped = CATEGORY_ORDER.map(([key, label]) => ({
-    key,
-    label,
-    entries: (manualData.entries || []).filter((entry) => entry.category === key),
-  }));
-
-  return (
-    <section className="manual-panel">
-      <div className="manual-section-head">
-        <div>
-          <span className="manual-eyebrow">About {partner?.username || "Partner"}</span>
-          <h3>對方的小手冊</h3>
-        </div>
-        <button type="button" onClick={() => setManualFormOpen((value) => !value)}>
-          <Plus size={18} />
-          新增資料
-        </button>
-      </div>
-
-      {manualFormOpen && (
-        <form className="manual-entry-form" onSubmit={saveManualEntry}>
-          <input type="hidden" name="subject_user_id" value={partner?.id || ""} />
-          <input type="hidden" name="category" value={draftCategory} />
-          <fieldset className="manual-category-picker">
-            <legend>分類</legend>
-            <div>
-              {CATEGORY_ORDER.map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={draftCategory === key ? "active" : ""}
-                  onClick={() => setDraftCategory(key)}
-                  aria-pressed={draftCategory === key}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="detail-row">
+              <dt>紀錄</dt>
+              <dd><strong>{footprintDetail.created_by_name || "Sync"}</strong></dd>
             </div>
-          </fieldset>
-          <label>
-            標籤
-            <input name="label" maxLength={40} placeholder="例如：過敏" required />
-          </label>
-          <label>
-            內容
-            <input name="value" maxLength={160} placeholder="例如：對花生過敏" required />
-          </label>
-          <button className="btn primary" type="submit">寫入手冊</button>
-        </form>
+          </dl>
+        </Modal>
       )}
-
-      {manualData.entries?.length === 0 && (
-        <div className="manual-empty">
-          <ShieldCheck size={25} />
-          <strong>還沒有確認過的手冊資料</strong>
-          <p>先記一件重要資訊，例如過敏、提醒時間或喜歡的照顧方式。</p>
-        </div>
-      )}
-
-      <div className="manual-category-list">
-        {grouped.map((group) => (
-          <section className="manual-category" key={group.key}>
-            <h4>{group.label}</h4>
-            {group.entries.length === 0 ? (
-              <p className="manual-muted">暫無紀錄</p>
-            ) : (
-              group.entries.map((entry) => (
-                <article className={entry.status === "pending" ? "pending" : ""} key={entry.id}>
-                  <div>
-                    <strong>{entry.label}</strong>
-                    <span>{entry.value}</span>
-                  </div>
-                  <footer>
-                    <small>來源：{entry.source_label} · {entry.status_label} · {shortDate(entry.updated_at)}</small>
-                    {entry.status === "pending" && (
-                      <button type="button" onClick={() => confirmEntry(entry.id)}>
-                        <CheckCircle2 size={16} />
-                        確認
-                      </button>
-                    )}
-                  </footer>
-                </article>
-              ))
-            )}
-          </section>
-        ))}
-      </div>
-      <p className="manual-footnote">敏感資料只會在 {activeUserData?.username || "你"} 和 {partner?.username || "對方"} 的連結中顯示。</p>
-    </section>
-  );
-}
-
-function FootprintPanel({ footprints, completed, onOpenOriginal }) {
-  const timeline = footprints.length > 0 ? footprints : [];
-
-  return (
-    <section className="footprint-panel">
-      <div className="manual-section-head">
-        <div>
-          <span className="manual-eyebrow">Our Journey</span>
-          <h3>共同足跡</h3>
-        </div>
-        <span className="footprint-count">{timeline.length} 則</span>
-      </div>
-
-      {timeline.length === 0 && (
-        <div className="manual-empty">
-          <Sparkles size={25} />
-          <strong>還沒有共同足跡</strong>
-          <p>完成第一顆共享泡泡後，這裡會自動留下紀錄。</p>
-          {completed.length > 0 && <small>目前完成紀錄會從新流程開始累積。</small>}
-        </div>
-      )}
-
-      <div className="footprint-timeline">
-        {timeline.map((item) => (
-          <article className="footprint-item" key={item.id}>
-            <div className="footprint-date">
-              <strong>{shortDate(item.completed_at)}</strong>
-              <span>完成泡泡</span>
-            </div>
-            <div className="footprint-pin" aria-hidden="true">✦</div>
-            <section className="footprint-paper">
-              <span className="paper-tape tape-top"></span>
-              <h4>{item.task_title}</h4>
-              {item.photo_data_url && <img src={item.photo_data_url} alt={`${item.task_title} 的共同足跡`} />}
-              <p>{item.note || "沒有新增照片或文字，保留完成這件事的基本紀錄。"}</p>
-              <div className="footprint-people">
-                {(item.participants || []).slice(0, 2).map((person) => (
-                  <span key={person.id}>{initial(person.name)}</span>
-                ))}
-              </div>
-              <footer>
-                <small>建立者 {item.created_by_name || "Sync"} · 更新於 {shortDate(item.updated_at)}</small>
-                <button type="button" onClick={() => onOpenOriginal(item)}>
-                  查看原泡泡
-                  <ChevronRight size={16} />
-                </button>
-              </footer>
-            </section>
-          </article>
-        ))}
-      </div>
-      <p className="manual-growth-note">持續累積，我們的手冊會越來越完整。</p>
-    </section>
+    </div>
   );
 }

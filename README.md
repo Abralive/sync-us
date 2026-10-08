@@ -9,8 +9,9 @@ Sync-Us 是一個以情侶共同生活為核心的開源 Web App。它不把生�
 - **星域**：用泡泡大小與軌道呈現壓力、急迫程度和任務歸屬。
 - **泡泡**：建立、分配、安排與篩選共同或私人事項。
 - **連結**：透過邀請碼配對，累積對方的小手冊與共同足跡。
-- **星塵獎勵**：在首頁長按戳破完成的泡泡，將完成感轉化為可累積的星塵。
-- **隱私邊界**：私人泡泡不會進入共享足跡，配對資料由後端驗證成員權限。
+- **星塵獎勵**：在首頁長按戳破完成的泡泡，將完成感轉化為可累積的星塵，並在商城兌換（兌換紀錄會保存）。
+- **隱私邊界**：私人泡泡只有建立者看得到，對方只會知道數量；配對資料由後端驗證成員權限。
+- **手機與電腦**：手機用底部導覽、電腦用左側導覽，星域、泡泡清單與手冊都有對應的版面。
 
 ## 技術架構
 
@@ -28,7 +29,7 @@ Sync-Us 是一個以情侶共同生活為核心的開源 Web App。它不把生�
 frontend/                 React 前端
   src/components/         依產品功能拆分的 UI 元件
   src/api/                API client
-  src/utils/              日期與音效工具
+  src/utils/              日期、泡泡排版、照片壓縮與音效工具
 sync_us_app/              Python 後端
   database.py             Schema 與資料庫初始化
   services.py             核心商業邏輯與權限驗證
@@ -64,6 +65,7 @@ cd ..
 python -m compileall -q sync_us_app tests
 python tests\verify_couple_invites.py
 python tests\verify_connection_features.py
+python tests\verify_privacy_and_rewards.py
 ```
 
 ## 專案狀態
@@ -78,6 +80,7 @@ python tests\verify_connection_features.py
 - [UX 改善計畫](05_Sync-Us_UX_Improvement_Plan.md)
 - [伴侶連結設計](12_Sync-Us_Couple_Link_Phase1.md)
 - [新電腦部署手冊](13_Sync-Us_New_PC_Deployment.md)
+- [RWD 改版與問題修復報告](15_Sync-Us_RWD_Bugfix_Report.md)
 
 ## License
 

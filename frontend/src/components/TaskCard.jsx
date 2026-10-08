@@ -1,65 +1,78 @@
-import { useRef, useState } from "react";
+import { Lock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { request } from "../api/client.js";
-import { formatDateTime } from "../utils/date.js";
+import { initialOf } from "../constants.js";
+import { formatDateTime, formatShortDateTime, isOverdue } from "../utils/date.js";
 import { playPop, unlockAudio } from "../utils/sound.js";
 
 const POP_HOLD_MS = 1100;
 const REWARD_ANIMATION_MS = 1450;
 
-function getInitial(name) {
-  return name?.trim()?.slice(0, 1) || "?";
-}
-
-function getParticipants(task) {
-  if (!task.is_private && !task.assigned_to_name) {
-    return [task.created_by_name || "Sync", "共同"];
-  }
-  return [task.assigned_to_name || task.created_by_name || "Sync"];
-}
-
-function getBubbleSize(task) {
-  const due = new Date(task.due_time);
-  const hoursLeft = (due - new Date()) / 36e5;
-  const urgencyBoost = hoursLeft < 0 ? 18 : hoursLeft < 24 ? 20 : hoursLeft < 72 ? 12 : 0;
-  const size = 118 + (Number(task.priority_weight) || 0) * 0.92 + urgencyBoost;
-  return Math.max(132, Math.min(232, Math.round(size)));
-}
-
-function getBubbleTitle(title) {
+function shortTitle(title) {
   return title?.replace(/^一起/, "").trim() || "新的泡泡";
 }
 
-export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, activeUser, onCompleted }) {
+function weightClass(weight) {
+  if (weight >= 80) return "heavy";
+  if (weight >= 55) return "medium";
+  return "light";
+}
+
+// A single bubble in the starfield. Tap opens the details, press and hold pops it.
+export default function TaskCard({
+  task,
+  activeUser,
+  members,
+  position,
+  index = 0,
+  onOpenDetails,
+  onCompleted,
+  onError,
+}) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
-  const [busy, setBusy] = useState(false);
   const holdTimer = useRef(null);
   const poppedRef = useRef(false);
-  const weightTone = task.priority_weight >= 80 ? "heavy" : task.priority_weight >= 55 ? "medium" : "light";
-  const participants = getParticipants(task);
-  const bubbleSize = getBubbleSize(task);
-  const bubbleTitle = getBubbleTitle(task.title);
+  const busyRef = useRef(false);
+  const onCompletedRef = useRef(onCompleted);
+  onCompletedRef.current = onCompleted;
+
+  // Only the hold timer is cancelled on unmount. The completion callback must still
+  // run if a background refresh removes this bubble while it is popping.
+  useEffect(() => () => window.clearTimeout(holdTimer.current), []);
+
+  const size = position.size;
+  const compact = size < 128;
+  const tiny = size < 104;
+  const overdue = isOverdue(task.due_time);
+  const people = task.assigned_to_id
+    ? members.filter((member) => member.id === task.assigned_to_id)
+    : task.is_private
+      ? members.filter((member) => member.id === task.created_by_id)
+      : members;
 
   async function popComplete() {
-    setBusy(true);
+    busyRef.current = true;
     try {
       const completedTask = await request(`/tasks/${task.id}/complete`, {
         method: "POST",
-        body: JSON.stringify({ user_id: activeUser }),
+        body: JSON.stringify({ user_id: Number(activeUser) }),
       });
-      if (!task.is_private) onCompleted?.(completedTask || task);
-    } finally {
-      setBusy(false);
+      // Leave the bubble popped; the refresh triggered by onCompleted removes it.
       window.setTimeout(() => {
-        setPopping(false);
-        onRefresh();
+        onCompletedRef.current?.(completedTask || task);
       }, REWARD_ANIMATION_MS);
+    } catch (err) {
+      setPopping(false);
+      onError?.(err.message || "完成失敗，請再試一次。");
+    } finally {
+      busyRef.current = false;
     }
   }
 
   function startHold(event) {
-    event.preventDefault();
-    if (task.is_completed || busy || popping) return;
+    if (event.button !== undefined && event.button !== 0) return;
+    if (task.is_completed || busyRef.current || popping) return;
     unlockAudio();
     poppedRef.current = false;
     setHolding(true);
@@ -83,29 +96,27 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
       poppedRef.current = false;
       return;
     }
-    if (onOpenDetails) onOpenDetails();
+    onOpenDetails?.(task);
   }
-
-  const burst = popping && (
-    <span className="pop-burst reward-burst" aria-hidden="true">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <span key={i} className="pop-shard" style={{ "--i": i }}></span>
-      ))}
-      {Array.from({ length: 12 }).map((_, i) => (
-        <span key={`dust-${i}`} className="stardust-drop" style={{ "--i": i }}>
-          {i % 5 === 0 ? "✦" : i % 4 === 0 ? "□" : "•"}
-        </span>
-      ))}
-    </span>
-  );
 
   return (
     <button
-      className={`garden-bubble-orb ${weightTone} ${holding ? "holding" : ""} ${popping ? "popping" : ""}`}
+      type="button"
+      className={[
+        "bubble",
+        weightClass(task.priority_weight),
+        compact ? "is-compact" : "",
+        tiny ? "is-tiny" : "",
+        overdue ? "is-overdue" : "",
+        holding ? "holding" : "",
+        popping ? "popping" : "",
+      ].join(" ")}
       style={{
+        left: `${position.x - size / 2}px`,
+        top: `${position.y - size / 2}px`,
+        "--bubble-size": `${size}px`,
         "--float-delay": `${index * -0.85}s`,
         "--hold-ms": `${POP_HOLD_MS}ms`,
-        "--bubble-size": `${bubbleSize}px`,
       }}
       onClick={handleClick}
       onPointerDown={startHold}
@@ -113,29 +124,40 @@ export default function TaskCard({ task, onRefresh, index = 0, onOpenDetails, ac
       onPointerCancel={cancelHold}
       onPointerLeave={cancelHold}
       onContextMenu={(event) => event.preventDefault()}
-      aria-label={`${task.title}，點擊查看細節，長按完成`}
+      aria-label={`${task.title}，${formatDateTime(task.due_time)}。點一下看細節，長按完成`}
     >
-      <span className="bubble-ring"></span>
-      <span className="bubble-glass"></span>
-      <span className="bubble-sheen"></span>
-      <span className="task-bubble-core"></span>
-      <span className="garden-title">{bubbleTitle}</span>
-      <span className="bubble-people" aria-hidden="true">
-        {participants.slice(0, 2).map((name, personIndex) => (
-          <span key={`${name}-${personIndex}`} className={`mini-person avatar-${personIndex + 1}`}>
-            {getInitial(name)}
+      <span className="bubble-ring" aria-hidden="true"></span>
+      <span className="bubble-sheen" aria-hidden="true"></span>
+      <span className="bubble-core" aria-hidden="true"></span>
+      <span className="bubble-content" aria-hidden="true">
+        <span className="bubble-title">
+          {task.is_private && <Lock size={12} strokeWidth={2.6} />}
+          {shortTitle(task.title)}
+        </span>
+        {!tiny && (
+          <span className="bubble-people">
+            {people.slice(0, 2).map((member) => (
+              <span key={member.id} className={`mini-avatar avatar-tone-${member.tone}`}>
+                {initialOf(member.username)}
+              </span>
+            ))}
           </span>
-        ))}
+        )}
+        {!compact && <span className="bubble-date">{formatShortDateTime(task.due_time)}</span>}
       </span>
-      <span className="garden-date">{formatDateTime(task.due_time)}</span>
-      <span className="bubble-tooltip" role="tooltip">
-        <strong>{task.title}</strong>
-        <small>{formatDateTime(task.due_time)}</small>
-        <small>{task.created_by_name ? `建立者 ${task.created_by_name}` : "共享泡泡"}</small>
-        {task.description && <span>{task.description}</span>}
-      </span>
-      {holding && <span className="garden-hold-hint">快破了</span>}
-      {burst}
+      {holding && <span className="bubble-hold-hint">快破了</span>}
+      {popping && (
+        <span className="pop-burst" aria-hidden="true">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span key={i} className="pop-shard" style={{ "--i": i }}></span>
+          ))}
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span key={`dust-${i}`} className="stardust-drop" style={{ "--i": i }}>
+              {i % 5 === 0 ? "✦" : i % 4 === 0 ? "✧" : "•"}
+            </span>
+          ))}
+        </span>
+      )}
     </button>
   );
 }

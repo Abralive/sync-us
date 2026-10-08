@@ -1,11 +1,17 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import services
 from .config import INDEX_PATH
 from .database import init_db
-from .schemas import CoupleCreate, TaskCreate, TaskUpdate, UserCreate
+from .schemas import TaskCreate, TaskUpdate, UserCreate
+
+
+def is_local_request(request: Request) -> bool:
+    forwarded = any(request.headers.get(name) for name in ("cf-connecting-ip", "x-forwarded-for", "cf-ray"))
+    host = request.client.host if request.client else ""
+    return not forwarded and host in {"127.0.0.1", "::1", "localhost"}
 
 
 def create_app() -> FastAPI:
@@ -34,17 +40,20 @@ def create_app() -> FastAPI:
     def create_user(user: UserCreate):
         return call_service(lambda: services.create_user(model_to_dict(user)))
 
+    @app.post("/api/v1/auth/login")
+    def login(payload: dict):
+        return call_service(lambda: services.login_user(payload))
+
     @app.get("/api/v1/users")
-    def list_users():
+    def list_users(request: Request):
+        # 完整使用者清單只給本機檢視模式
+        if not is_local_request(request):
+            raise HTTPException(status_code=404, detail="Not found")
         return services.list_users()
 
     @app.get("/api/v1/users/{user_id}")
     def get_user(user_id: int):
         return call_service(lambda: services.get_user(user_id))
-
-    @app.post("/api/v1/couples")
-    def create_couple(couple: CoupleCreate):
-        return call_service(lambda: services.create_couple(model_to_dict(couple)))
 
     @app.post("/api/v1/couple-invites")
     def create_couple_invite(payload: dict):
@@ -86,6 +95,14 @@ def create_app() -> FastAPI:
     def confirm_manual(entry_id: int, payload: dict):
         return call_service(lambda: services.confirm_manual_entry(entry_id, payload.get("user_id")))
 
+    @app.get("/api/v1/couples/{couple_id}/rewards")
+    def list_rewards(couple_id: int, user_id: int):
+        return call_service(lambda: services.list_rewards(couple_id, user_id))
+
+    @app.post("/api/v1/couples/{couple_id}/rewards", status_code=201)
+    def redeem_reward(couple_id: int, payload: dict):
+        return call_service(lambda: services.redeem_reward(couple_id, payload.get("user_id"), payload.get("item_key")))
+
     @app.get("/api/v1/couples/{couple_id}/footprints")
     def list_footprints(couple_id: int, user_id: int):
         return call_service(lambda: services.list_footprints(couple_id, user_id))
@@ -106,17 +123,25 @@ def create_app() -> FastAPI:
     ):
         return services.list_tasks(couple_id=couple_id, user_id=user_id, view=view)
 
+    @app.get("/api/v1/tasks/completed")
+    def list_completed(
+        couple_id: int | None = None,
+        user_id: int | None = None,
+        view: str = Query("all", pattern="^(all|private|shared|mine)$"),
+    ):
+        return services.list_completed(couple_id=couple_id, user_id=user_id, view=view)
+
     @app.get("/api/v1/tasks/{task_id}")
-    def get_task(task_id: int):
-        return call_service(lambda: services.get_task(task_id))
+    def get_task(task_id: int, user_id: int | None = None):
+        return call_service(lambda: services.get_task(task_id, user_id))
 
     @app.put("/api/v1/tasks/{task_id}")
-    def update_task(task_id: int, task: TaskUpdate):
-        return call_service(lambda: services.update_task(task_id, model_to_dict(task, exclude_unset=True)))
+    def update_task(task_id: int, task: TaskUpdate, user_id: int | None = None):
+        return call_service(lambda: services.update_task(task_id, model_to_dict(task, exclude_unset=True), user_id))
 
     @app.delete("/api/v1/tasks/{task_id}")
-    def delete_task(task_id: int):
-        return call_service(lambda: services.delete_task(task_id))
+    def delete_task(task_id: int, user_id: int | None = None):
+        return call_service(lambda: services.delete_task(task_id, user_id))
 
     @app.post("/api/v1/tasks/{task_id}/complete")
     def complete_task(task_id: int, payload: dict):
@@ -126,9 +151,13 @@ def create_app() -> FastAPI:
     def save_task_footprint(task_id: int, payload: dict):
         return call_service(lambda: services.save_task_footprint(task_id, payload.get("user_id"), payload))
 
+    @app.post("/api/v1/tasks/{task_id}/confirm")
+    def confirm_task(task_id: int, payload: dict):
+        return call_service(lambda: services.confirm_task(task_id, payload.get("user_id")))
+
     @app.get("/api/v1/stats")
-    def get_stats(couple_id: int = 1):
-        return services.get_stats(couple_id)
+    def get_stats(couple_id: int = 1, user_id: int | None = None):
+        return services.get_stats(couple_id, user_id=user_id)
 
     return app
 
@@ -148,6 +177,8 @@ def call_service(callback):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except services.ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"資料格式不正確：{exc}") from exc
 
 
 app = create_app()

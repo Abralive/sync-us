@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import json
+import re
 import secrets
 import sqlite3
 import string
@@ -49,6 +50,13 @@ MANUAL_STATUS = {"pending", "confirmed"}
 MANUAL_SOURCE_TYPES = {"manual", "self", "ai_suggestion", "footprint"}
 INVITE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 INVITE_TTL = timedelta(days=7)
+REWARD_ITEMS = {
+    "coffee": {"title": "雙人咖啡券", "cost": 80, "copy": "完成共享泡泡後，換一個不用吵架的補給。"},
+    "dinner": {"title": "晚餐許願卡", "cost": 140, "copy": "把共同完成的努力，換成一次被認真安排的晚餐。"},
+    "weekend": {"title": "週末空白時段", "cost": 220, "copy": "保留一段不被打擾、也不被雜事插隊的共同時間。"},
+}
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+TITLE_MAX = 60
 
 
 def parse_dt(value) -> datetime | None:
@@ -67,17 +75,46 @@ def health() -> dict:
     return {"ok": True, "time": utc_now()}
 
 
+def normalize_email(value) -> str:
+    return str(value or "").strip().lower()
+
+
 def create_user(data: dict) -> dict:
+    username = str(data.get("username") or "").strip()
+    email = normalize_email(data.get("email"))
+    if not username:
+        raise ValidationError("請先替你的小星球取一個名字。")
+    if len(username) > 30:
+        raise ValidationError("名字最多 30 個字。")
+    if not EMAIL_PATTERN.match(email):
+        raise ValidationError("Email 格式看起來不太對，請再確認一次。")
     with connect() as conn:
+        exists = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
+        if exists:
+            raise ConflictError("這個 Email 已經註冊過了，請直接登入。")
         try:
             cur = conn.execute(
                 "INSERT INTO users (username, email, created_at) VALUES (?, ?, ?)",
-                (data["username"], data["email"], utc_now()),
+                (username, email, utc_now()),
             )
         except sqlite3.IntegrityError as exc:
-            raise ConflictError("Email already exists") from exc
+            raise ConflictError("這個 Email 已經註冊過了，請直接登入。") from exc
         conn.commit()
         return get_user(cur.lastrowid)
+
+
+def login_user(data: dict) -> dict:
+    email = normalize_email(data.get("email"))
+    if not email:
+        raise ValidationError("請輸入註冊時使用的 Email。")
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE lower(email) = ? ORDER BY id LIMIT 1",
+            (email,),
+        ).fetchone()
+    if not row:
+        raise NotFoundError("找不到這個 Email，請先註冊或換一個帳號。")
+    return row_to_dict(row)
 
 
 def list_users() -> list[dict]:
@@ -89,7 +126,7 @@ def get_user(user_id: int) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
-            raise NotFoundError("User not found")
+            raise NotFoundError("找不到這個使用者")
         return row_to_dict(row)
 
 
@@ -98,7 +135,7 @@ def create_couple(data: dict) -> dict:
         partner_a = int(data["partner_a_id"])
         partner_b = int(data["partner_b_id"])
         if partner_a == partner_b:
-            raise ValidationError("Cannot connect a user to themselves")
+            raise ValidationError("不能和自己建立連結")
         ensure_user_has_no_active_couple(conn, partner_a)
         ensure_user_has_no_active_couple(conn, partner_b)
         cur = conn.execute(
@@ -125,7 +162,7 @@ def get_couple(couple_id: int) -> dict:
             (couple_id,),
         ).fetchone()
         if not row:
-            raise NotFoundError("Couple not found")
+            raise NotFoundError("還沒有建立連結")
         return row_to_dict(row)
 
 
@@ -143,7 +180,7 @@ def get_user_couple(user_id: int) -> dict:
             (user_id, user_id),
         ).fetchone()
         if not row:
-            raise NotFoundError("Couple not found")
+            raise NotFoundError("還沒有建立連結")
         return row_to_dict(row)
 
 
@@ -159,7 +196,7 @@ def ensure_user_has_no_active_couple(conn: sqlite3.Connection, user_id: int) -> 
         (user_id, user_id),
     ).fetchone()
     if row:
-        raise ConflictError("User already has an active Sync-Us connection")
+        raise ConflictError("其中一方已經有 Sync-Us 連結了")
 
 
 def generate_invite_code(conn: sqlite3.Connection) -> str:
@@ -168,7 +205,7 @@ def generate_invite_code(conn: sqlite3.Connection) -> str:
         exists = conn.execute("SELECT id FROM couple_invites WHERE invite_code = ?", (code,)).fetchone()
         if not exists:
             return code
-    raise ConflictError("Could not generate invite code")
+    raise ConflictError("暫時無法產生邀請碼，請再試一次")
 
 
 def normalize_invite(row: sqlite3.Row) -> dict:
@@ -185,7 +222,7 @@ def create_couple_invite(data: dict) -> dict:
     with connect() as conn:
         inviter = conn.execute("SELECT * FROM users WHERE id = ?", (inviter_id,)).fetchone()
         if not inviter:
-            raise NotFoundError("Inviter not found")
+            raise NotFoundError("找不到邀請人")
         ensure_user_has_no_active_couple(conn, inviter_id)
         existing = conn.execute(
             """
@@ -230,7 +267,7 @@ def get_couple_invite(invite_id: int) -> dict:
             (invite_id,),
         ).fetchone()
         if not row:
-            raise NotFoundError("Invite not found")
+            raise NotFoundError("找不到這個邀請碼")
         invite = normalize_invite(row)
         if invite["status"] == "expired":
             conn.execute(
@@ -256,7 +293,7 @@ def get_couple_invite_by_code(invite_code: str) -> dict:
             (code,),
         ).fetchone()
         if not row:
-            raise NotFoundError("Invite not found")
+            raise NotFoundError("找不到這個邀請碼")
         invite = normalize_invite(row)
         if invite["status"] == "expired":
             conn.execute(
@@ -271,7 +308,7 @@ def list_couple_invites_for_user(user_id: int) -> dict:
     with connect() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError("找不到這個使用者")
         rows = conn.execute(
             """
             SELECT i.*, inviter.username AS inviter_name, inviter.email AS inviter_email,
@@ -294,15 +331,15 @@ def accept_couple_invite(invite_code: str, data: dict) -> dict:
     with connect() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError("找不到這個使用者")
         invite = conn.execute(
             "SELECT * FROM couple_invites WHERE invite_code = ?",
             (code,),
         ).fetchone()
         if not invite:
-            raise NotFoundError("Invite not found")
+            raise NotFoundError("找不到這個邀請碼")
         if invite["status"] != "pending":
-            raise ConflictError("Invite is not pending")
+            raise ConflictError("這個邀請碼已經用過或被取消了")
         expires_at = parse_dt(invite["expires_at"])
         if expires_at and expires_at < utc_now_dt():
             conn.execute(
@@ -310,11 +347,11 @@ def accept_couple_invite(invite_code: str, data: dict) -> dict:
                 (utc_now(), invite["id"]),
             )
             conn.commit()
-            raise ConflictError("Invite expired")
+            raise ConflictError("這個邀請碼已過期，請對方重新產生")
         if invite["inviter_id"] == user_id:
-            raise ValidationError("Invite must be accepted by the other person")
+            raise ValidationError("邀請碼要由對方輸入，不能自己接受")
         if invite["invitee_email"] and invite["invitee_email"].lower() != user["email"].lower():
-            raise ValidationError("This invite is for a different email")
+            raise ValidationError("這個邀請碼是給另一個 Email 的")
         ensure_user_has_no_active_couple(conn, invite["inviter_id"])
         ensure_user_has_no_active_couple(conn, user_id)
         now = utc_now()
@@ -345,13 +382,13 @@ def decline_couple_invite(invite_code: str, data: dict) -> dict:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         invite = conn.execute("SELECT * FROM couple_invites WHERE invite_code = ?", (code,)).fetchone()
         if not user or not invite:
-            raise NotFoundError("Invite not found")
+            raise NotFoundError("找不到這個邀請碼")
         if invite["status"] != "pending":
-            raise ConflictError("Invite is not pending")
+            raise ConflictError("這個邀請碼已經用過或被取消了")
         if invite["inviter_id"] != user_id and (
             not invite["invitee_email"] or invite["invitee_email"].lower() != user["email"].lower()
         ):
-            raise ValidationError("User cannot decline this invite")
+            raise ValidationError("你不能處理這個邀請")
         now = utc_now()
         conn.execute(
             "UPDATE couple_invites SET status = 'declined', updated_at = ? WHERE id = ?",
@@ -363,7 +400,7 @@ def decline_couple_invite(invite_code: str, data: dict) -> dict:
 
 def ensure_couple_member(conn: sqlite3.Connection, couple_id: int, user_id: int | None) -> sqlite3.Row:
     if user_id is None:
-        raise ValidationError("Missing user_id")
+        raise ValidationError("缺少使用者資料，請重新登入")
     row = conn.execute(
         """
         SELECT c.*, a.username AS partner_a_name, b.username AS partner_b_name
@@ -383,6 +420,19 @@ def ensure_couple_member(conn: sqlite3.Connection, couple_id: int, user_id: int 
 
 def ensure_task_member(conn: sqlite3.Connection, task: sqlite3.Row, user_id: int | None) -> sqlite3.Row:
     return ensure_couple_member(conn, task["couple_id"], user_id or task["created_by_id"])
+
+
+def ensure_task_visible(task, user_id: int | None) -> None:
+    """Private bubbles belong to their creator only (a missing user_id is never the owner)."""
+    if task["is_private"] and (user_id is None or task["created_by_id"] != int(user_id)):
+        raise NotFoundError("找不到這顆泡泡")
+
+
+def visible_task_clause(user_id: int | None) -> tuple[str, list]:
+    """SQL filter so a partner never receives the other person's private bubbles."""
+    if user_id is None:
+        return "t.is_private = 0", []
+    return "(t.is_private = 0 OR t.created_by_id = ?)", [user_id]
 
 
 def partner_user_id(couple: sqlite3.Row, user_id: int) -> int:
@@ -438,7 +488,7 @@ def list_manual_entries(
 def upsert_manual_entry(couple_id: int, user_id: int, data: dict) -> dict:
     category = data.get("category")
     if category not in MANUAL_CATEGORIES:
-        raise ValidationError("Unknown manual category")
+        raise ValidationError("未知的手冊分類")
     label = str(data.get("label", "")).strip()
     value = str(data.get("value", "")).strip()
     if not label or not value:
@@ -498,7 +548,7 @@ def confirm_manual_entry(entry_id: int, user_id: int) -> dict:
     with connect() as conn:
         entry = conn.execute("SELECT * FROM partner_manual_entries WHERE id = ?", (entry_id,)).fetchone()
         if not entry:
-            raise NotFoundError("Manual entry not found")
+            raise NotFoundError("找不到這筆手冊資料")
         ensure_couple_member(conn, entry["couple_id"], user_id)
         conn.execute(
             "UPDATE partner_manual_entries SET status = 'confirmed', updated_by_id = ?, updated_at = ? WHERE id = ?",
@@ -573,13 +623,32 @@ def query_manual(couple_id: int, user_id: int, query: str) -> dict:
 
 
 def create_task(data: dict) -> dict:
+    title = str(data.get("title") or "").strip()
+    if not title:
+        raise ValidationError("請填寫泡泡名稱")
+    if len(title) > TITLE_MAX:
+        raise ValidationError(f"泡泡名稱最多 {TITLE_MAX} 個字")
     due = parse_dt(data.get("due_time"))
     if due is None:
         raise ValidationError("請設定到期時間")
     if due <= utc_now_dt():
         raise ValidationError("到期時間必須是未來時間（避免回填刷星塵）")
+    couple_id = int(data.get("couple_id") or 1)
+    created_by = int(data.get("created_by_id") or 1)
+    is_private = bool(data.get("is_private", False))
+    assigned = data.get("assigned_to_id")
+    assigned = int(assigned) if assigned not in (None, "") else None
+    priority = max(1, min(100, int(data.get("priority_weight", 50))))
+    reminder = max(0, int(data.get("reminder_minutes", 60)))
     now = utc_now()
     with connect() as conn:
+        couple = ensure_couple_member(conn, couple_id, created_by)
+        members = {couple["partner_a_id"], couple["partner_b_id"]}
+        if assigned is not None and assigned not in members:
+            raise ValidationError("泡泡只能交給你們兩人之一")
+        if is_private:
+            # 私人泡泡只屬於建立者自己
+            assigned = created_by
         cur = conn.execute(
             """
             INSERT INTO tasks (
@@ -589,16 +658,16 @@ def create_task(data: dict) -> dict:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                data["title"],
-                data.get("description", ""),
+                title,
+                str(data.get("description") or "").strip(),
                 serialize_datetime(data["due_time"]),
-                int(data.get("priority_weight", 50)),
-                data.get("couple_id", 1),
-                data.get("created_by_id", 1),
-                data.get("assigned_to_id"),
-                int(bool(data.get("is_private", False))),
-                int(data.get("reminder_minutes", 60)),
-                data.get("collaboration_note", ""),
+                priority,
+                couple_id,
+                created_by,
+                assigned,
+                int(is_private),
+                reminder,
+                str(data.get("collaboration_note") or "").strip(),
                 now,
                 now,
             ),
@@ -606,7 +675,7 @@ def create_task(data: dict) -> dict:
         task_id = cur.lastrowid
         match_similar_tasks(conn, task_id)
         conn.commit()
-        return get_task(task_id)
+        return _load_task(task_id)
 
 
 def list_tasks(couple_id: int | None = None, user_id: int | None = None, view: str = "all") -> list[dict]:
@@ -626,6 +695,11 @@ def list_tasks(couple_id: int | None = None, user_id: int | None = None, view: s
         where.append("(t.created_by_id = ? OR t.assigned_to_id = ?)")
         params.extend([user_id, user_id])
 
+    # 對方的私人泡泡永遠不會出現在你的清單裡
+    privacy_clause, privacy_params = visible_task_clause(user_id)
+    where.append(privacy_clause)
+    params.extend(privacy_params)
+
     # 進行中清單不顯示已完成（已完成的歸入「完成回顧」）
     where.append("t.is_completed = 0")
 
@@ -638,44 +712,61 @@ def list_tasks(couple_id: int | None = None, user_id: int | None = None, view: s
         return [normalize_task(row) for row in rows]
 
 
-def get_task(task_id: int) -> dict:
+def _load_task(task_id: int) -> dict:
     with connect() as conn:
         row = conn.execute(f"{task_select_sql()} WHERE t.id = ?", (task_id,)).fetchone()
         if not row:
-            raise NotFoundError("Task not found")
+            raise NotFoundError("找不到這顆泡泡")
         return normalize_task(row)
 
 
-def update_task(task_id: int, data: dict) -> dict:
-    updates = {key: value for key, value in data.items() if key in ALLOWED_TASK_UPDATES}
-    if not updates:
-        return get_task(task_id)
+def get_task(task_id: int, user_id: int | None = None) -> dict:
+    task = _load_task(task_id)
+    ensure_task_visible(task, user_id)
+    return task
 
-    assignments = []
-    values = []
-    for key, value in updates.items():
-        if value is None:
-            continue
-        if key == "due_time":
-            value = serialize_datetime(value)
-        if key in {"is_private", "is_completed"}:
-            value = int(bool(value))
-        assignments.append(f"{key} = ?")
-        values.append(value)
-    if not assignments:
-        return get_task(task_id)
 
-    assignments.append("updated_at = ?")
-    values.append(utc_now())
-    values.append(task_id)
-
+def update_task(task_id: int, data: dict, user_id: int | None = None) -> dict:
+    updates = {key: value for key, value in data.items() if key in ALLOWED_TASK_UPDATES and value is not None}
     with connect() as conn:
-        cur = conn.execute(f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?", values)
-        if cur.rowcount == 0:
-            raise NotFoundError("Task not found")
-        match_similar_tasks(conn, task_id)
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            raise NotFoundError("找不到這顆泡泡")
+        if user_id is not None:
+            ensure_task_member(conn, task, user_id)
+        ensure_task_visible(task, user_id)
+        if not updates:
+            return _load_task(task_id)
+
+        if "title" in updates:
+            updates["title"] = str(updates["title"]).strip()
+            if not updates["title"] or len(updates["title"]) > TITLE_MAX:
+                raise ValidationError(f"泡泡名稱需要 1–{TITLE_MAX} 個字")
+        if "due_time" in updates:
+            updates["due_time"] = serialize_datetime(updates["due_time"])
+        if "is_private" in updates:
+            updates["is_private"] = int(bool(updates["is_private"]))
+        becomes_private = bool(updates.get("is_private", task["is_private"]))
+        if "assigned_to_id" in updates:
+            couple = conn.execute("SELECT * FROM couples WHERE id = ?", (task["couple_id"],)).fetchone()
+            members = {couple["partner_a_id"], couple["partner_b_id"]} if couple else {task["created_by_id"]}
+            if int(updates["assigned_to_id"]) not in members:
+                raise ValidationError("泡泡只能交給你們兩人之一")
+        if becomes_private:
+            # 私人泡泡只屬於建立者，也不能再和對方的泡泡配對
+            updates["assigned_to_id"] = task["created_by_id"]
+
+        assignments = [f"{key} = ?" for key in updates]
+        values = list(updates.values())
+        assignments.append("updated_at = ?")
+        values.extend([utc_now(), task_id])
+        conn.execute(f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?", values)
+        if becomes_private:
+            conn.execute("UPDATE tasks SET matched_task_id = NULL WHERE matched_task_id = ? OR id = ?", (task_id, task_id))
+        else:
+            match_similar_tasks(conn, task_id)
         conn.commit()
-        return get_task(task_id)
+        return _load_task(task_id)
 
 
 def footprint_participants(conn: sqlite3.Connection, task: sqlite3.Row) -> list[dict]:
@@ -711,8 +802,9 @@ def create_or_update_footprint_for_task(
 ) -> dict | None:
     task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if not task:
-        raise NotFoundError("Task not found")
+        raise NotFoundError("找不到這顆泡泡")
     ensure_task_member(conn, task, user_id)
+    ensure_task_visible(task, user_id)
     if task["is_private"]:
         return None
     if not task["is_completed"]:
@@ -797,7 +889,7 @@ def get_footprint_by_id(conn: sqlite3.Connection, footprint_id: int) -> dict:
         (footprint_id,),
     ).fetchone()
     if not row:
-        raise NotFoundError("Footprint not found")
+        raise NotFoundError("找不到這則足跡")
     return normalize_footprint(row)
 
 
@@ -838,14 +930,15 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
     with connect() as conn:
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
-            raise NotFoundError("Task not found")
+            raise NotFoundError("找不到這顆泡泡")
+        ensure_task_visible(task, user_id)
         actor = user_id or task["created_by_id"]
         ensure_task_member(conn, task, actor)
         if task["is_completed"]:
             if not task["is_private"]:
                 create_or_update_footprint_for_task(conn, task_id, actor)
                 conn.commit()
-            return get_task(task_id)
+            return _load_task(task_id)
 
         is_private = bool(task["is_private"])
         conn.execute(
@@ -874,7 +967,7 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
         if not is_private:
             create_or_update_footprint_for_task(conn, task_id, actor)
         conn.commit()
-        return get_task(task_id)
+        return _load_task(task_id)
 
 
 def confirm_task(task_id: int, user_id: int | None = None) -> dict:
@@ -882,7 +975,8 @@ def confirm_task(task_id: int, user_id: int | None = None) -> dict:
     with connect() as conn:
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
         if not task:
-            raise NotFoundError("Task not found")
+            raise NotFoundError("找不到這顆泡泡")
+        ensure_task_visible(task, user_id)
         actor = user_id or task["created_by_id"]
         ensure_task_member(conn, task, actor)
         if not task["is_completed"]:
@@ -898,7 +992,7 @@ def confirm_task(task_id: int, user_id: int | None = None) -> dict:
         )
         _evaluate_award(conn, task_id)
         conn.commit()
-        return get_task(task_id)
+        return _load_task(task_id)
 
 
 def _awarded_today(conn: sqlite3.Connection, couple_id, on_date: str) -> int:
@@ -949,6 +1043,9 @@ def list_completed(couple_id: int | None = None, user_id: int | None = None, vie
     if user_id is not None and view == "mine":
         where.append("(t.completed_by_id = ? OR t.created_by_id = ?)")
         params.extend([user_id, user_id])
+    privacy_clause, privacy_params = visible_task_clause(user_id)
+    where.append(privacy_clause)
+    params.extend(privacy_params)
 
     clause = f"WHERE {' AND '.join(where)}"
     with connect() as conn:
@@ -959,12 +1056,22 @@ def list_completed(couple_id: int | None = None, user_id: int | None = None, vie
         return [normalize_task(row) for row in rows]
 
 
+def _stardust_balance(conn: sqlite3.Connection, couple_id) -> tuple[int, int]:
+    earned = conn.execute(
+        "SELECT COALESCE(SUM(stardust_awarded), 0) AS dust FROM tasks WHERE couple_id = ?",
+        (couple_id,),
+    ).fetchone()["dust"]
+    spent = conn.execute(
+        "SELECT COALESCE(SUM(cost), 0) AS spent FROM reward_redemptions WHERE couple_id = ?",
+        (couple_id,),
+    ).fetchone()["spent"]
+    return earned, spent
+
+
 def get_stardust(couple_id: int = 1) -> dict:
     with connect() as conn:
-        total = conn.execute(
-            "SELECT COALESCE(SUM(stardust_awarded), 0) AS dust FROM tasks WHERE couple_id = ?",
-            (couple_id,),
-        ).fetchone()["dust"]
+        earned, spent = _stardust_balance(conn, couple_id)
+        total = earned - spent
         pending = conn.execute(
             "SELECT COUNT(*) AS count FROM tasks WHERE couple_id = ? AND is_completed = 1 AND confirmed = 0",
             (couple_id,),
@@ -972,6 +1079,8 @@ def get_stardust(couple_id: int = 1) -> dict:
         today = utc_now_dt().date().isoformat()
         return {
             "stardust": total,
+            "earned": earned,
+            "spent": spent,
             "pending_confirm": pending,
             "awarded_today": _awarded_today(conn, couple_id, today),
             "daily_cap": DAILY_AWARD_CAP,
@@ -979,30 +1088,100 @@ def get_stardust(couple_id: int = 1) -> dict:
         }
 
 
-def delete_task(task_id: int) -> dict:
+def list_rewards(couple_id: int, user_id: int) -> dict:
     with connect() as conn:
-        cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        if cur.rowcount == 0:
-            raise NotFoundError("Task not found")
+        ensure_couple_member(conn, couple_id, user_id)
+        earned, spent = _stardust_balance(conn, couple_id)
+        rows = conn.execute(
+            """
+            SELECT r.*, u.username AS user_name
+            FROM reward_redemptions r
+            JOIN users u ON u.id = r.user_id
+            WHERE r.couple_id = ?
+            ORDER BY r.created_at DESC, r.id DESC
+            """,
+            (couple_id,),
+        ).fetchall()
+    return {
+        "balance": earned - spent,
+        "earned": earned,
+        "spent": spent,
+        "items": [{"key": key, **item} for key, item in REWARD_ITEMS.items()],
+        "redemptions": [row_to_dict(row) for row in rows],
+    }
+
+
+def redeem_reward(couple_id: int, user_id: int, item_key: str) -> dict:
+    item = REWARD_ITEMS.get(str(item_key or ""))
+    if not item:
+        raise ValidationError("找不到這個獎勵")
+    with connect() as conn:
+        ensure_couple_member(conn, couple_id, user_id)
+        # 檢查餘額與寫入放在同一個 SQL 指令裡，兩人同時兌換也不會透支
+        cur = conn.execute(
+            """
+            INSERT INTO reward_redemptions (couple_id, user_id, item_key, item_title, cost, created_at)
+            SELECT ?, ?, ?, ?, ?, ?
+            WHERE (SELECT COALESCE(SUM(stardust_awarded), 0) FROM tasks WHERE couple_id = ?)
+                - (SELECT COALESCE(SUM(cost), 0) FROM reward_redemptions WHERE couple_id = ?) >= ?
+            """,
+            (couple_id, user_id, item_key, item["title"], item["cost"], utc_now(), couple_id, couple_id, item["cost"]),
+        )
+        if cur.rowcount != 1:
+            raise ConflictError("星塵還不夠，再一起完成幾顆泡泡吧")
+        conn.commit()
+    return list_rewards(couple_id, user_id)
+
+
+def delete_task(task_id: int, user_id: int | None = None) -> dict:
+    with connect() as conn:
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            raise NotFoundError("找不到這顆泡泡")
+        if user_id is None:
+            raise ValidationError("缺少使用者資料，請重新登入")
+        ensure_task_member(conn, task, user_id)
+        ensure_task_visible(task, user_id)
+        if task["is_completed"]:
+            raise ConflictError("已完成的泡泡會留在共同紀錄裡，不能刪除")
+        # 先解除其他泡泡對它的配對參照，否則 foreign key 會擋下刪除
         conn.execute("UPDATE tasks SET matched_task_id = NULL WHERE matched_task_id = ?", (task_id,))
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
         return {"deleted": True}
 
 
-def get_stats(couple_id: int = 1) -> dict:
+def get_stats(couple_id: int = 1, user_id: int | None = None) -> dict:
+    visibility = ""
+    params: list = [couple_id]
+    if user_id is not None:
+        visibility = "AND (is_private = 0 OR created_by_id = ?)"
+        params.append(user_id)
     with connect() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) AS completed,
                 SUM(CASE WHEN is_private = 0 THEN 1 ELSE 0 END) AS shared,
                 ROUND(AVG(priority_weight), 1) AS average_weight
             FROM tasks
-            WHERE couple_id = ?
+            WHERE couple_id = ? {visibility}
             """,
-            (couple_id,),
+            params,
         ).fetchone()
         stats = row_to_dict(row)
+        # 只回傳私人泡泡的「數量」，讓對方知道你在忙，但看不到內容
+        private_rows = conn.execute(
+            """
+            SELECT created_by_id, COUNT(*) AS count
+            FROM tasks
+            WHERE couple_id = ? AND is_private = 1 AND is_completed = 0
+            GROUP BY created_by_id
+            """,
+            (couple_id,),
+        ).fetchall()
+        stats["private_active"] = {str(item["created_by_id"]): item["count"] for item in private_rows}
         total = stats["total"] or 0
         completed = stats["completed"] or 0
         stats["completion_rate"] = round((completed / total) * 100, 1) if total else 0
