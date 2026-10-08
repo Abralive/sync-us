@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from . import services
 from .config import INDEX_PATH
@@ -35,6 +35,14 @@ def create_app() -> FastAPI:
     @app.get("/api/v1/health")
     def health():
         return services.health()
+
+    @app.get("/api/v1/bootstrap")
+    def bootstrap(user_id: int):
+        return call_service(lambda: services.bootstrap(user_id))
+
+    @app.get("/api/v1/version")
+    def data_version(user_id: int):
+        return call_service(lambda: {"version": services.data_version(user_id)})
 
     @app.post("/api/v1/users")
     def create_user(user: UserCreate):
@@ -137,7 +145,8 @@ def create_app() -> FastAPI:
 
     @app.put("/api/v1/tasks/{task_id}")
     def update_task(task_id: int, task: TaskUpdate, user_id: int | None = None):
-        return call_service(lambda: services.update_task(task_id, model_to_dict(task, exclude_unset=True), user_id))
+        data = model_to_dict(task, exclude_unset=True)
+        return call_service(lambda: services.update_task(task_id, data, user_id or data.get("user_id")))
 
     @app.delete("/api/v1/tasks/{task_id}")
     def delete_task(task_id: int, user_id: int | None = None):
@@ -146,6 +155,14 @@ def create_app() -> FastAPI:
     @app.post("/api/v1/tasks/{task_id}/complete")
     def complete_task(task_id: int, payload: dict):
         return call_service(lambda: services.complete_task(task_id, payload.get("user_id")))
+
+    @app.post("/api/v1/tasks/{task_id}/reopen")
+    def reopen_task(task_id: int, payload: dict):
+        return call_service(lambda: services.reopen_task(task_id, payload.get("user_id")))
+
+    @app.post("/api/v1/tasks/{task_id}/restore")
+    def restore_task(task_id: int, payload: dict):
+        return call_service(lambda: services.restore_task(task_id, payload.get("user_id")))
 
     @app.post("/api/v1/tasks/{task_id}/footprint")
     def save_task_footprint(task_id: int, payload: dict):
@@ -171,6 +188,9 @@ def model_to_dict(model, exclude_unset: bool = False) -> dict:
 def call_service(callback):
     try:
         return callback()
+    except services.UserNotFoundError as exc:
+        # Same body as the standard-library server: clients sign out only on this code.
+        return JSONResponse(status_code=404, content={"detail": str(exc), "code": "user_not_found"})
     except services.NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except services.ConflictError as exc:

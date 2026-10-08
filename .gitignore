@@ -8,9 +8,14 @@ __pycache__/
 
 # Local databases and runtime files
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.sqlite
 *.sqlite3
 *.log
+backups/
+logs/
 server.*.log
 cloudflared.exe
 start_sync_us.bat

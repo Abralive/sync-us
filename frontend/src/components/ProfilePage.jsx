@@ -1,7 +1,8 @@
-import { HeartHandshake, LogOut, Mail } from "lucide-react";
+import { HeartHandshake, LogOut, Mail, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
 import { daysSince } from "../utils/date.js";
+import { isSoundEnabled, playPop, setSoundEnabled } from "../utils/sound.js";
 import Avatar from "./Avatar.jsx";
 
 export default function ProfilePage({
@@ -10,7 +11,7 @@ export default function ProfilePage({
   partner,
   couple,
   tasks,
-  completed,
+  completedSummary,
   stardust,
   reviewMode,
   onSwitchUser,
@@ -18,6 +19,7 @@ export default function ProfilePage({
   onLogout,
 }) {
   const [allUsers, setAllUsers] = useState([]);
+  const [sound, setSound] = useState(() => isSoundEnabled());
   const myId = me?.id;
 
   useEffect(() => {
@@ -26,7 +28,13 @@ export default function ProfilePage({
   }, [reviewMode]);
 
   const carrying = tasks.filter((task) => task.is_private || task.assigned_to_id === myId).length;
-  const doneByMe = completed.filter((task) => task.completed_by_id === myId).length;
+  const doneByMe = Number(completedSummary?.by_user?.[String(myId)] || 0);
+
+  function toggleSound(enabled) {
+    setSoundEnabled(enabled);
+    setSound(enabled);
+    if (enabled) playPop();
+  }
 
   return (
     <div className="profile-page">
@@ -91,6 +99,18 @@ export default function ProfilePage({
           </div>
         </section>
       </div>
+
+      <section className="card settings-card" aria-labelledby="settings-title">
+        <h2 id="settings-title" className="card-title">偏好設定</h2>
+        <label className="switch-field">
+          <input type="checkbox" checked={sound} onChange={(event) => toggleSound(event.target.checked)} />
+          <span className="switch" aria-hidden="true"></span>
+          <span>
+            <strong><Volume2 size={14} /> 戳破音效與震動</strong>
+            <small>在教室、圖書館或深夜，可以先關掉。只影響這台裝置。</small>
+          </span>
+        </label>
+      </section>
 
       {reviewMode && allUsers.length > 0 && (
         <section className="card review-card">

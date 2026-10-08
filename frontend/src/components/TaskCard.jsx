@@ -1,9 +1,8 @@
 import { Lock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { request } from "../api/client.js";
 import { initialOf } from "../constants.js";
 import { formatDateTime, formatShortDateTime, isOverdue } from "../utils/date.js";
-import { playPop, unlockAudio } from "../utils/sound.js";
+import { haptic, playPop, unlockAudio } from "../utils/sound.js";
 
 const POP_HOLD_MS = 1100;
 const REWARD_ANIMATION_MS = 1450;
@@ -18,28 +17,23 @@ function weightClass(weight) {
   return "light";
 }
 
-// A single bubble in the starfield. Tap opens the details, press and hold pops it.
-export default function TaskCard({
-  task,
-  activeUser,
-  members,
-  position,
-  index = 0,
-  onOpenDetails,
-  onCompleted,
-  onError,
-}) {
+// A single bubble in the starfield. Tap opens the details; press and hold pops it
+// (a ring fills up around the bubble while holding, so it is clear how long to press).
+export default function TaskCard({ task, members, position, index = 0, onOpenDetails, onPop }) {
   const [holding, setHolding] = useState(false);
   const [popping, setPopping] = useState(false);
   const holdTimer = useRef(null);
   const poppedRef = useRef(false);
   const busyRef = useRef(false);
-  const onCompletedRef = useRef(onCompleted);
-  onCompletedRef.current = onCompleted;
+  const mountedRef = useRef(true);
 
-  // Only the hold timer is cancelled on unmount. The completion callback must still
-  // run if a background refresh removes this bubble while it is popping.
-  useEffect(() => () => window.clearTimeout(holdTimer.current), []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      window.clearTimeout(holdTimer.current);
+    };
+  }, []);
 
   const size = position.size;
   const compact = size < 128;
@@ -53,18 +47,12 @@ export default function TaskCard({
 
   async function popComplete() {
     busyRef.current = true;
+    const animationDone = new Promise((resolve) => window.setTimeout(resolve, REWARD_ANIMATION_MS));
     try {
-      const completedTask = await request(`/tasks/${task.id}/complete`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: Number(activeUser) }),
-      });
-      // Leave the bubble popped; the refresh triggered by onCompleted removes it.
-      window.setTimeout(() => {
-        onCompletedRef.current?.(completedTask || task);
-      }, REWARD_ANIMATION_MS);
-    } catch (err) {
-      setPopping(false);
-      onError?.(err.message || "完成失敗，請再試一次。");
+      // The app removes this bubble once the request and the falling stardust are both done.
+      await onPop?.(task, animationDone);
+    } catch {
+      if (mountedRef.current) setPopping(false);
     } finally {
       busyRef.current = false;
     }
@@ -81,7 +69,7 @@ export default function TaskCard({
       setPopping(true);
       poppedRef.current = true;
       playPop();
-      if (navigator.vibrate) navigator.vibrate([40, 30, 80]);
+      haptic([40, 30, 80]);
       popComplete();
     }, POP_HOLD_MS);
   }
@@ -124,11 +112,17 @@ export default function TaskCard({
       onPointerCancel={cancelHold}
       onPointerLeave={cancelHold}
       onContextMenu={(event) => event.preventDefault()}
-      aria-label={`${task.title}，${formatDateTime(task.due_time)}。點一下看細節，長按完成`}
+      aria-label={`${task.title}，${formatDateTime(task.due_time)}${overdue ? "，已過期" : ""}。點一下看細節，長按完成`}
     >
       <span className="bubble-ring" aria-hidden="true"></span>
       <span className="bubble-sheen" aria-hidden="true"></span>
       <span className="bubble-core" aria-hidden="true"></span>
+      {holding && (
+        <svg className="hold-progress" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <circle className="hold-progress-track" cx="50" cy="50" r="48" pathLength="100" />
+          <circle className="hold-progress-fill" cx="50" cy="50" r="48" pathLength="100" />
+        </svg>
+      )}
       <span className="bubble-content" aria-hidden="true">
         <span className="bubble-title">
           {task.is_private && <Lock size={12} strokeWidth={2.6} />}
@@ -145,7 +139,7 @@ export default function TaskCard({
         )}
         {!compact && <span className="bubble-date">{formatShortDateTime(task.due_time)}</span>}
       </span>
-      {holding && <span className="bubble-hold-hint">快破了</span>}
+      {holding && <span className="bubble-hold-hint">繼續按住</span>}
       {popping && (
         <span className="pop-burst" aria-hidden="true">
           {Array.from({ length: 8 }).map((_, i) => (

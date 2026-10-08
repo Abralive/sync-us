@@ -5,6 +5,10 @@ import sqlite3
 from .config import DB_PATH
 
 
+# Set by init_db() once the database is in WAL mode. WAL keeps readers and the writer from
+# blocking each other, and makes synchronous=NORMAL safe (no corruption on power loss).
+_WAL_ENABLED = False
+
 TASK_COLUMNS = {
     "description": "TEXT NOT NULL DEFAULT ''",
     "couple_id": "INTEGER",
@@ -21,6 +25,8 @@ TASK_COLUMNS = {
     "confirmed_at": "TEXT",
     "confirmed_by_id": "INTEGER",
     "stardust_awarded": "INTEGER NOT NULL DEFAULT 0",
+    "deleted_at": "TEXT",
+    "deleted_by_id": "INTEGER",
     "updated_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
     "created_at": "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
 }
@@ -35,9 +41,12 @@ def utc_now_dt() -> datetime:
 
 
 def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    # timeout = how long a writer waits for another writer instead of failing with "database is locked"
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    if _WAL_ENABLED:
+        conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
@@ -45,8 +54,32 @@ def row_to_dict(row: sqlite3.Row) -> dict:
     return dict(row)
 
 
+def enable_wal(conn: sqlite3.Connection) -> bool:
+    global _WAL_ENABLED
+    try:
+        mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+    except sqlite3.DatabaseError:
+        mode = ""
+    _WAL_ENABLED = str(mode).lower() == "wal"
+    return _WAL_ENABLED
+
+
+def quick_check() -> tuple[bool, str]:
+    """Fast structural check of the database file (run at startup)."""
+    try:
+        with connect() as conn:
+            rows = [row[0] for row in conn.execute("PRAGMA quick_check").fetchall()]
+    except sqlite3.DatabaseError as exc:
+        return False, str(exc)
+    if rows == ["ok"]:
+        return True, "ok"
+    return False, "; ".join(str(item) for item in rows[:5])
+
+
 def init_db() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
+        enable_wal(conn)
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -173,6 +206,36 @@ def init_db() -> None:
         )
         ensure_couple_columns(conn)
         ensure_task_columns(conn)
+        # Created after ensure_task_columns: older databases only get some columns there.
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_tasks_couple_state
+                ON tasks(couple_id, is_completed, due_time);
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_couple_completed
+                ON tasks(couple_id, completed_at);
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_matched
+                ON tasks(matched_task_id);
+
+            CREATE INDEX IF NOT EXISTS idx_couples_partner_a
+                ON couples(partner_a_id, status);
+
+            CREATE INDEX IF NOT EXISTS idx_couples_partner_b
+                ON couples(partner_b_id, status);
+
+            -- The change fingerprint (/version) reads MAX(updated_at) every few seconds;
+            -- without these, footprint photos (stored inline) make it walk megabytes.
+            CREATE INDEX IF NOT EXISTS idx_tasks_couple_updated
+                ON tasks(couple_id, updated_at);
+
+            CREATE INDEX IF NOT EXISTS idx_footprints_couple_updated
+                ON shared_footprints(couple_id, updated_at);
+
+            CREATE INDEX IF NOT EXISTS idx_manual_couple_updated
+                ON partner_manual_entries(couple_id, updated_at);
+            """
+        )
         if os.environ.get("SYNC_US_SEED", "0") == "1":
             seed_data(conn)
 

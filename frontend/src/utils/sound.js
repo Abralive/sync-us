@@ -1,4 +1,22 @@
 let ctx = null;
+const SOUND_KEY = "sync-us-sound";
+
+// Pop sound and vibration can be turned off in 「我的」 (for class, the library, late at night).
+export function isSoundEnabled() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setSoundEnabled(enabled) {
+  try {
+    localStorage.setItem(SOUND_KEY, enabled ? "on" : "off");
+  } catch {
+    // storage blocked: the choice lasts for this visit only
+  }
+}
 
 function getCtx() {
   if (typeof window === "undefined") return null;
@@ -11,13 +29,24 @@ function getCtx() {
 // Call inside a user gesture (e.g. pointerdown) so iOS Safari unlocks audio
 // before the delayed pop sound actually plays.
 export function unlockAudio() {
+  if (!isSoundEnabled()) return;
   const ac = getCtx();
   if (ac && ac.state === "suspended") ac.resume();
+}
+
+export function haptic(pattern) {
+  if (!isSoundEnabled()) return;
+  try {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+  } catch {
+    // some browsers throw when vibration is not allowed
+  }
 }
 
 // Synthesizes a short bubble "pop": a pitch-dropping sine body plus a tiny
 // high-passed noise click for the attack. No audio file needed.
 export function playPop() {
+  if (!isSoundEnabled()) return;
   const ac = getCtx();
   if (!ac) return;
   if (ac.state === "suspended") ac.resume();

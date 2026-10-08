@@ -21,9 +21,9 @@
 
 ### 選項 B：保留目前帳號、配對和泡泡
 
-先關閉舊電腦上的 Sync-Us，再把舊電腦專案根目錄的 `sync_us.db` 單獨複製到新電腦相同位置。
+最簡單的做法是在舊電腦執行 `python run_sync_us.py --backup`，再把 `backups` 資料夾裡最新的 `sync_us-日期.db` 複製到新電腦，改名成 `sync_us.db`。備份檔是完整的單一檔案，服務執行中也能安全產生。
 
-> 不要在服務仍執行時複製資料庫，否則可能取得不完整資料。
+> 資料庫使用 WAL 模式，`sync_us.db` 旁邊可能還有 `sync_us.db-wal`、`sync_us.db-shm`。如果要直接複製 `sync_us.db`，請先停止服務，並連同這兩個檔案一起複製，否則可能少掉最近的資料。
 
 ## 1. 舊電腦：確認最新版已上傳 GitHub
 
@@ -110,7 +110,9 @@ frontend/dist/assets/
 
 目前 App 內的 Email 登入仍不是完整密碼驗證，因此網域外層需要保留 HTTP Basic Auth。
 
-在新電腦 PowerShell 執行：
+最簡單的方式：直接執行第 6 步的 `deploy\windows\install_autostart.bat`，它會問你要不要設定帳密，並幫你存好。
+
+也可以手動在新電腦 PowerShell 執行：
 
 ```powershell
 $syncCredential = Get-Credential -Message "設定 Sync-Us 網域共用帳密"
@@ -126,14 +128,46 @@ Remove-Variable syncPassword
 
 完成後關閉 PowerShell，再開新視窗，讓環境變數生效。
 
+不想用環境變數的話，也可以在專案根目錄建立 `.env` 檔（已被 `.gitignore` 排除，不會上傳）：
+
+```text
+SYNC_US_USER=你們的共用帳號
+SYNC_US_PASS=你們的共用密碼
+```
+
+沒有設定帳密時，Sync-Us 啟動時會在日誌寫下警告。
+
 這組帳密是打開 `syncus.hunghung.xyz` 時瀏覽器最先詢問的帳密，可以只分享給你和男朋友。
 
 ## 6. 啟動 Sync-Us
+
+### 建議：開機登入後自動啟動
+
+雙擊：
+
+```text
+deploy\windows\install_autostart.bat
+```
+
+它會：
+
+1. 找到這台電腦的 Python（需要 3.10 以上）。
+2. 檢查外層帳密，沒有設定時會詢問你。
+3. 建立 Windows 排程「Sync-Us」：每次登入 Windows 時在背景啟動，不會出現黑色視窗；伺服器停止時會自動重新啟動。
+4. 立刻啟動一次，並確認 `http://127.0.0.1:8051` 有回應。
+
+取消自動啟動：雙擊 `deploy\windows\uninstall_autostart.bat`（不會刪除資料或帳密）。
+
+> 這些腳本使用 Windows 內建的「工作排程器」。如果出現「存取被拒」，在 `.bat` 上按右鍵選「以系統管理員身分執行」。
+
+### 手動啟動（測試用）
 
 ```powershell
 cd $HOME\Downloads\sync-us
 python run_sync_us.py
 ```
+
+或雙擊 `start_syncus_8051.bat`。這種方式關掉視窗就會停止，而且不能和自動啟動同時開著（8051 埠只能給一個程式用）。
 
 看到服務啟動訊息後，先在新電腦測試：
 
@@ -143,21 +177,17 @@ http://127.0.0.1:8051
 
 瀏覽器應先要求輸入第 5 步設定的共用帳密，成功後才會看到 Sync-Us。
 
-不要關閉這個 PowerShell 視窗，關閉後 App 服務就會停止。
+Sync-Us 預設只接受這台電腦本身的連線（`127.0.0.1`），外部一律經過 Cloudflare Tunnel。如果需要讓同一個 Wi-Fi 裡的手機直接連 `http://電腦IP:8051`，可以把環境變數 `SYNC_US_HOST` 設成 `0.0.0.0`，但這樣同網路的其他人也連得到。
 
 ## 7. 搬移資料庫（僅選項 B）
 
-確認新電腦的 Sync-Us 已停止，再把舊電腦的：
-
-```text
-sync_us.db
-```
-
-複製到：
+確認新電腦的 Sync-Us 已停止（有設定自動啟動的話，先執行 `uninstall_autostart.bat`），再把第 0 步準備好的備份檔複製到：
 
 ```text
 C:\Users\你的帳號\Downloads\sync-us\sync_us.db
 ```
+
+如果新電腦的 `sync_us.db` 旁邊已經有 `sync_us.db-wal`、`sync_us.db-shm`，請一起刪掉，否則舊的暫存內容會和新資料庫混在一起。完成後再重新執行 `install_autostart.bat`。
 
 若要從全新資料開始，跳過此步驟。
 
@@ -233,13 +263,15 @@ Restart-Service cloudflared
 
 ### 502 Bad Gateway
 
-Tunnel 正常，但 Sync-Us 沒有在 8051 執行：
+Tunnel 正常，但 Sync-Us 沒有在 8051 執行。先雙擊：
 
-```powershell
-Test-NetConnection 127.0.0.1 -Port 8051
+```text
+deploy\windows\status.bat
 ```
 
-如果 `TcpTestSucceeded` 是 `False`，重新執行：
+它會顯示自動啟動排程、本機服務、Cloudflare Tunnel、最新備份，以及 `logs\sync_us.log` 最近的日誌，通常就能看出原因（例如電腦剛開機還沒登入、8051 埠被另一個視窗佔用、Python 出錯）。
+
+沒有設定自動啟動的話，重新執行：
 
 ```powershell
 cd $HOME\Downloads\sync-us
@@ -277,7 +309,22 @@ npm run build
 cd ..
 ```
 
-接著重新啟動 `python run_sync_us.py`。資料保存在 `sync_us.db`，一般程式更新不應覆蓋它；更新前仍建議先備份資料庫。
+接著重新啟動：有設定自動啟動的話，重新執行 `deploy\windows\install_autostart.bat`（會停止舊版、啟動新版）；手動啟動的話，關掉舊視窗再執行 `python run_sync_us.py`。
+
+資料保存在 `sync_us.db`，一般程式更新不會覆蓋它。更新前可以先執行 `python run_sync_us.py --backup` 多留一份備份。
+
+## 11.5 自動備份與還原
+
+- Sync-Us 啟動時、以及之後每 24 小時，會把資料庫備份到 `backups\sync_us-日期時間.db`，保留最新 14 份。
+- 備份資料夾已被 `.gitignore` 排除，不會上傳 GitHub。
+- 刪除的泡泡會先保留 7 天（24 小時內可以在 App 裡復原），之後才真正清除。
+
+還原步驟：
+
+1. 停止 Sync-Us（`uninstall_autostart.bat`，或關掉手動啟動的視窗）。
+2. 把目前的 `sync_us.db` 改名留著（例如 `sync_us-壞掉.db`），並刪除 `sync_us.db-wal`、`sync_us.db-shm`。
+3. 把要還原的備份檔複製成 `sync_us.db`。
+4. 重新執行 `install_autostart.bat`。
 
 ## 12. 上線前最低安全要求
 
@@ -285,7 +332,7 @@ cd ..
 - 保留外層共用帳密。
 - 不公開 `?review=1`；目前程式已限制它只能在 `localhost` 或 `127.0.0.1` 使用。
 - 不把 `.db`、`.env`、密碼或 token 上傳 GitHub。
-- 定期備份 `sync_us.db`。
+- 確認 `backups` 資料夾每天都有新的備份（`status.bat` 會顯示最新一份）。
 - 真正商用前應把 Email 選擇登入改成伺服器端密碼驗證，並把 SQLite 遷移到受管理的 PostgreSQL。
 
 ## 最短部署清單
@@ -295,9 +342,8 @@ cd ..
 [ ] 新電腦安裝 Git / Python / Node / cloudflared
 [ ] git clone
 [ ] frontend 執行 npm ci + npm run build
-[ ] 設定 SYNC_US_USER / SYNC_US_PASS / HOST / PORT
-[ ] python run_sync_us.py
-[ ] 本機 8051 驗證
+[ ] 執行 deploy\windows\install_autostart.bat（設定帳密、自動啟動）
+[ ] 本機 8051 驗證（status.bat 顯示「本機服務：正常」）
 [ ] Cloudflare 重新產生 token
 [ ] 管理員 PowerShell 安裝 Tunnel 服務
 [ ] 手機 4G/5G 驗證 syncus.hunghung.xyz

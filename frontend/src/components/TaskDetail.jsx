@@ -1,12 +1,9 @@
-import { CalendarClock, CheckCircle2, Gauge, Sparkles, Trash2, Users } from "lucide-react";
-import { useState } from "react";
+import { CalendarClock, CheckCircle2, Gauge, Pencil, Sparkles, Trash2, Users } from "lucide-react";
 import { bubbleTone, weightLabel } from "../constants.js";
 import { countdownText, formatFullDate, isOverdue } from "../utils/date.js";
 import Modal from "./Modal.jsx";
 
-export default function TaskDetail({ task, members, activeUser, onClose, onComplete, onDelete }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [busy, setBusy] = useState("");
+export default function TaskDetail({ task, members, activeUser, onClose, onComplete, onEdit, onDelete }) {
   const overdue = isOverdue(task.due_time);
   const assignee = members.find((member) => member.id === task.assigned_to_id);
   const ownerText = task.is_private
@@ -15,37 +12,23 @@ export default function TaskDetail({ task, members, activeUser, onClose, onCompl
       ? `交給 ${assignee.id === Number(activeUser) ? "我" : assignee.username}`
       : "兩個人一起照顧";
 
-  async function run(kind, action) {
-    setBusy(kind);
-    try {
-      await action(task);
-    } finally {
-      setBusy("");
-    }
-  }
-
-  const footer = confirmDelete ? (
-    <div className="confirm-row">
-      <p>確定要刪除「{task.title}」嗎？刪除後無法復原。</p>
-      <div className="btn-row">
-        <button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(false)} disabled={Boolean(busy)}>
-          取消
-        </button>
-        <button type="button" className="btn btn-danger" onClick={() => run("delete", onDelete)} disabled={Boolean(busy)}>
-          {busy === "delete" ? "刪除中..." : "確定刪除"}
-        </button>
-      </div>
-    </div>
-  ) : (
+  // Deleting and completing both offer 「復原」 right after, so no extra confirmation step.
+  const footer = (
     <div className="btn-row btn-row-split">
-      <button type="button" className="btn btn-ghost btn-danger-text" onClick={() => setConfirmDelete(true)} disabled={Boolean(busy)}>
+      <button type="button" className="btn btn-ghost btn-danger-text" onClick={() => onDelete(task)}>
         <Trash2 size={17} />
         刪除
       </button>
-      <button type="button" className="btn btn-primary" onClick={() => run("complete", onComplete)} disabled={Boolean(busy)}>
-        <CheckCircle2 size={18} />
-        {busy === "complete" ? "完成中..." : "完成這顆泡泡"}
-      </button>
+      <div className="btn-row">
+        <button type="button" className="btn btn-ghost" onClick={() => onEdit(task)}>
+          <Pencil size={17} />
+          編輯
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => onComplete(task)}>
+          <CheckCircle2 size={18} />
+          完成
+        </button>
+      </div>
     </div>
   );
 
@@ -84,7 +67,7 @@ export default function TaskDetail({ task, members, activeUser, onClose, onCompl
           另一顆泡泡「{task.matched_task_title}」看起來是同一件事，可以一起處理。
         </p>
       )}
-      <p className="detail-hint">在星域長按泡泡，也可以直接戳破完成。</p>
+      <p className="detail-hint">在星域長按泡泡，也可以直接戳破完成；完成或刪除後都能馬上復原。</p>
     </Modal>
   );
 }

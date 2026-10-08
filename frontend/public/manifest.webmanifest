@@ -1,0 +1,16 @@
+{
+  "name": "Sync-Us 兩個人的泡泡星域",
+  "short_name": "Sync-Us",
+  "description": "讓伴侶看見彼此的壓力與付出，用共享泡泡一起規劃生活。",
+  "lang": "zh-Hant",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f1e6",
+  "theme_color": "#f8f1e6",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

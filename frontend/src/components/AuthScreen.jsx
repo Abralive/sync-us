@@ -1,9 +1,10 @@
-import { Heart, LogIn, Sparkles, UserPlus } from "lucide-react";
+import { Heart, HeartHandshake, LogIn, Sparkles, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { request } from "../api/client.js";
 
-export default function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState("login");
+export default function AuthScreen({ pendingInvite = "", onAuthenticated }) {
+  // Someone who arrives through an invite link most likely has no account yet.
+  const [mode, setMode] = useState(pendingInvite ? "register" : "login");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
@@ -50,6 +51,16 @@ export default function AuthScreen({ onAuthenticated }) {
             <span className="brand-sub">一起照顧生活裡的泡泡</span>
           </div>
         </div>
+
+        {pendingInvite && (
+          <div className="callout invite-callout" role="note">
+            <HeartHandshake size={18} aria-hidden="true" />
+            <p>
+              <strong>你收到一個 Sync-Us 邀請</strong>
+              先註冊或登入，下一步就能接受邀請（{pendingInvite}）。
+            </p>
+          </div>
+        )}
 
         <div className="auth-hero">
           <Sparkles size={20} aria-hidden="true" />

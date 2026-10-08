@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
+import hashlib
 import json
 import re
 import secrets
 import sqlite3
 import string
 
+from .config import APP_VERSION
 from .database import connect, row_to_dict, utc_now, utc_now_dt
 
 
@@ -27,6 +29,10 @@ DUE_GRACE = timedelta(hours=6)  # 到期前多久內完成也算數（以到期�
 
 class NotFoundError(Exception):
     pass
+
+
+class UserNotFoundError(NotFoundError):
+    """The account itself is gone (e.g. database reset): clients should sign out."""
 
 
 class ConflictError(Exception):
@@ -57,6 +63,14 @@ REWARD_ITEMS = {
 }
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 TITLE_MAX = 60
+DESCRIPTION_MAX = 200
+# Undo windows: a completed bubble can be reopened by whoever completed it for a short
+# while; a deleted bubble stays restorable for a day and is purged after a week.
+REOPEN_WINDOW = timedelta(minutes=15)
+RESTORE_WINDOW = timedelta(hours=24)
+
+# Startup integrity result, reported by /health.
+INTEGRITY = {"ok": True, "detail": "not checked"}
 
 
 def parse_dt(value) -> datetime | None:
@@ -72,7 +86,15 @@ def parse_dt(value) -> datetime | None:
 
 
 def health() -> dict:
-    return {"ok": True, "time": utc_now()}
+    database = "ok"
+    try:
+        with connect() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except sqlite3.Error:
+        database = "error"
+    if database == "ok" and not INTEGRITY["ok"]:
+        database = "integrity-problem"
+    return {"ok": database == "ok", "time": utc_now(), "database": database, "version": APP_VERSION}
 
 
 def normalize_email(value) -> str:
@@ -126,7 +148,7 @@ def get_user(user_id: int) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
-            raise NotFoundError("找不到這個使用者")
+            raise UserNotFoundError("找不到這個使用者")
         return row_to_dict(row)
 
 
@@ -435,6 +457,20 @@ def visible_task_clause(user_id: int | None) -> tuple[str, list]:
     return "(t.is_private = 0 OR t.created_by_id = ?)", [user_id]
 
 
+def fetch_task_row(conn: sqlite3.Connection, task_id: int, include_deleted: bool = False) -> sqlite3.Row:
+    """Raw task row; deleted bubbles behave as missing unless asked for (restore)."""
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if not task or (task["deleted_at"] and not include_deleted):
+        raise NotFoundError("找不到這顆泡泡")
+    return task
+
+
+def require_user(user_id) -> int:
+    if user_id in (None, ""):
+        raise ValidationError("缺少使用者資料，請重新登入")
+    return int(user_id)
+
+
 def partner_user_id(couple: sqlite3.Row, user_id: int) -> int:
     return couple["partner_b_id"] if couple["partner_a_id"] == user_id else couple["partner_a_id"]
 
@@ -640,6 +676,9 @@ def create_task(data: dict) -> dict:
     assigned = int(assigned) if assigned not in (None, "") else None
     priority = max(1, min(100, int(data.get("priority_weight", 50))))
     reminder = max(0, int(data.get("reminder_minutes", 60)))
+    description = str(data.get("description") or "").strip()
+    if len(description) > DESCRIPTION_MAX:
+        raise ValidationError(f"備註最多 {DESCRIPTION_MAX} 個字")
     now = utc_now()
     with connect() as conn:
         couple = ensure_couple_member(conn, couple_id, created_by)
@@ -659,7 +698,7 @@ def create_task(data: dict) -> dict:
             """,
             (
                 title,
-                str(data.get("description") or "").strip(),
+                description,
                 serialize_datetime(data["due_time"]),
                 priority,
                 couple_id,
@@ -700,8 +739,9 @@ def list_tasks(couple_id: int | None = None, user_id: int | None = None, view: s
     where.append(privacy_clause)
     params.extend(privacy_params)
 
-    # 進行中清單不顯示已完成（已完成的歸入「完成回顧」）
+    # 進行中清單不顯示已完成（已完成的歸入「完成回顧」）與已刪除的泡泡
     where.append("t.is_completed = 0")
+    where.append("t.deleted_at IS NULL")
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     with connect() as conn:
@@ -712,10 +752,10 @@ def list_tasks(couple_id: int | None = None, user_id: int | None = None, view: s
         return [normalize_task(row) for row in rows]
 
 
-def _load_task(task_id: int) -> dict:
+def _load_task(task_id: int, include_deleted: bool = False) -> dict:
     with connect() as conn:
         row = conn.execute(f"{task_select_sql()} WHERE t.id = ?", (task_id,)).fetchone()
-        if not row:
+        if not row or (row["deleted_at"] and not include_deleted):
             raise NotFoundError("找不到這顆泡泡")
         return normalize_task(row)
 
@@ -727,14 +767,20 @@ def get_task(task_id: int, user_id: int | None = None) -> dict:
 
 
 def update_task(task_id: int, data: dict, user_id: int | None = None) -> dict:
-    updates = {key: value for key, value in data.items() if key in ALLOWED_TASK_UPDATES and value is not None}
+    """Edit a bubble. Any partner may edit a shared bubble; only its creator may change privacy."""
+    user_id = require_user(user_id)
+    # assigned_to_id may be sent as null on purpose: "一起照顧" (nobody in particular).
+    updates = {
+        key: value
+        for key, value in data.items()
+        if key in ALLOWED_TASK_UPDATES and (value is not None or key == "assigned_to_id")
+    }
     with connect() as conn:
-        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if not task:
-            raise NotFoundError("找不到這顆泡泡")
-        if user_id is not None:
-            ensure_task_member(conn, task, user_id)
+        task = fetch_task_row(conn, task_id)
+        ensure_task_member(conn, task, user_id)
         ensure_task_visible(task, user_id)
+        if task["is_completed"]:
+            raise ConflictError("已完成的泡泡會留在紀錄裡，不能再修改")
         if not updates:
             return _load_task(task_id)
 
@@ -742,16 +788,38 @@ def update_task(task_id: int, data: dict, user_id: int | None = None) -> dict:
             updates["title"] = str(updates["title"]).strip()
             if not updates["title"] or len(updates["title"]) > TITLE_MAX:
                 raise ValidationError(f"泡泡名稱需要 1–{TITLE_MAX} 個字")
+        if "description" in updates:
+            updates["description"] = str(updates["description"]).strip()
+            if len(updates["description"]) > DESCRIPTION_MAX:
+                raise ValidationError(f"備註最多 {DESCRIPTION_MAX} 個字")
+        if "collaboration_note" in updates:
+            updates["collaboration_note"] = str(updates["collaboration_note"]).strip()[:DESCRIPTION_MAX]
         if "due_time" in updates:
+            due = parse_dt(updates["due_time"])
+            if due is None:
+                raise ValidationError("請設定正確的到期時間")
+            if due != parse_dt(task["due_time"]) and due <= utc_now_dt():
+                raise ValidationError("到期時間必須是未來時間")
             updates["due_time"] = serialize_datetime(updates["due_time"])
+        if "priority_weight" in updates:
+            updates["priority_weight"] = max(1, min(100, int(updates["priority_weight"])))
+        if "reminder_minutes" in updates:
+            updates["reminder_minutes"] = max(0, int(updates["reminder_minutes"]))
         if "is_private" in updates:
             updates["is_private"] = int(bool(updates["is_private"]))
+            if updates["is_private"] != task["is_private"] and user_id != task["created_by_id"]:
+                raise ValidationError("只有建立泡泡的人可以改變私人設定")
         becomes_private = bool(updates.get("is_private", task["is_private"]))
         if "assigned_to_id" in updates:
-            couple = conn.execute("SELECT * FROM couples WHERE id = ?", (task["couple_id"],)).fetchone()
-            members = {couple["partner_a_id"], couple["partner_b_id"]} if couple else {task["created_by_id"]}
-            if int(updates["assigned_to_id"]) not in members:
-                raise ValidationError("泡泡只能交給你們兩人之一")
+            assigned = updates["assigned_to_id"]
+            if assigned in (None, ""):
+                updates["assigned_to_id"] = None
+            else:
+                couple = conn.execute("SELECT * FROM couples WHERE id = ?", (task["couple_id"],)).fetchone()
+                members = {couple["partner_a_id"], couple["partner_b_id"]} if couple else {task["created_by_id"]}
+                if int(assigned) not in members:
+                    raise ValidationError("泡泡只能交給你們兩人之一")
+                updates["assigned_to_id"] = int(assigned)
         if becomes_private:
             # 私人泡泡只屬於建立者，也不能再和對方的泡泡配對
             updates["assigned_to_id"] = task["created_by_id"]
@@ -760,10 +828,21 @@ def update_task(task_id: int, data: dict, user_id: int | None = None) -> dict:
         values = list(updates.values())
         assignments.append("updated_at = ?")
         values.extend([utc_now(), task_id])
-        conn.execute(f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?", values)
-        if becomes_private:
+        cur = conn.execute(
+            f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ? AND is_completed = 0 AND deleted_at IS NULL",
+            values,
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            current = fetch_task_row(conn, task_id)
+            if current["is_completed"]:
+                raise ConflictError("這顆泡泡剛剛被完成了，不能再修改")
+            raise ConflictError("這顆泡泡剛剛被修改了，請再試一次")
+        renamed = "title" in updates and updates["title"] != task["title"]
+        if becomes_private or renamed:
+            # 私人泡泡不配對；改名後舊的「同一件事」配對可能已經不成立
             conn.execute("UPDATE tasks SET matched_task_id = NULL WHERE matched_task_id = ? OR id = ?", (task_id, task_id))
-        else:
+        if not becomes_private:
             match_similar_tasks(conn, task_id)
         conn.commit()
         return _load_task(task_id)
@@ -800,9 +879,7 @@ def create_or_update_footprint_for_task(
     note: str | None = None,
     photo_data_url: str | None = None,
 ) -> dict | None:
-    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    if not task:
-        raise NotFoundError("找不到這顆泡泡")
+    task = fetch_task_row(conn, task_id)
     ensure_task_member(conn, task, user_id)
     ensure_task_visible(task, user_id)
     if task["is_private"]:
@@ -928,9 +1005,7 @@ def save_task_footprint(task_id: int, user_id: int, data: dict) -> dict:
 def complete_task(task_id: int, user_id: int | None = None) -> dict:
     now = utc_now()
     with connect() as conn:
-        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if not task:
-            raise NotFoundError("找不到這顆泡泡")
+        task = fetch_task_row(conn, task_id)
         ensure_task_visible(task, user_id)
         actor = user_id or task["created_by_id"]
         ensure_task_member(conn, task, actor)
@@ -941,7 +1016,7 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
             return _load_task(task_id)
 
         is_private = bool(task["is_private"])
-        conn.execute(
+        cur = conn.execute(
             """
             UPDATE tasks
             SET is_completed = 1,
@@ -951,7 +1026,7 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
                 confirmed_at = ?,
                 confirmed_by_id = ?,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND is_completed = 0 AND deleted_at IS NULL
             """,
             (
                 now,
@@ -963,6 +1038,13 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
                 task_id,
             ),
         )
+        if cur.rowcount != 1:
+            # Changed between the read and the write: deleted (missing) or already completed.
+            conn.rollback()
+            current = fetch_task_row(conn, task_id)
+            if current["is_completed"]:
+                return _load_task(task_id)
+            raise ConflictError("這顆泡泡剛剛被修改了，請再試一次")
         _evaluate_award(conn, task_id)
         if not is_private:
             create_or_update_footprint_for_task(conn, task_id, actor)
@@ -973,9 +1055,7 @@ def complete_task(task_id: int, user_id: int | None = None) -> dict:
 def confirm_task(task_id: int, user_id: int | None = None) -> dict:
     now = utc_now()
     with connect() as conn:
-        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if not task:
-            raise NotFoundError("找不到這顆泡泡")
+        task = fetch_task_row(conn, task_id)
         ensure_task_visible(task, user_id)
         actor = user_id or task["created_by_id"]
         ensure_task_member(conn, task, actor)
@@ -1031,7 +1111,7 @@ def _evaluate_award(conn: sqlite3.Connection, task_id: int) -> None:
 
 
 def list_completed(couple_id: int | None = None, user_id: int | None = None, view: str = "all") -> list[dict]:
-    where = ["t.is_completed = 1"]
+    where = ["t.is_completed = 1", "t.deleted_at IS NULL"]
     params: list = []
     if couple_id is not None:
         where.append("t.couple_id = ?")
@@ -1134,21 +1214,95 @@ def redeem_reward(couple_id: int, user_id: int, item_key: str) -> dict:
 
 
 def delete_task(task_id: int, user_id: int | None = None) -> dict:
+    """Soft delete: the bubble disappears for both partners but can be restored for a day."""
+    user_id = require_user(user_id)
     with connect() as conn:
-        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if not task:
-            raise NotFoundError("找不到這顆泡泡")
-        if user_id is None:
-            raise ValidationError("缺少使用者資料，請重新登入")
+        task = fetch_task_row(conn, task_id)
         ensure_task_member(conn, task, user_id)
         ensure_task_visible(task, user_id)
         if task["is_completed"]:
             raise ConflictError("已完成的泡泡會留在共同紀錄裡，不能刪除")
-        # 先解除其他泡泡對它的配對參照，否則 foreign key 會擋下刪除
+        now = utc_now()
+        cur = conn.execute(
+            """
+            UPDATE tasks
+            SET deleted_at = ?, deleted_by_id = ?, matched_task_id = NULL, updated_at = ?
+            WHERE id = ? AND is_completed = 0 AND deleted_at IS NULL
+            """,
+            (now, user_id, now, task_id),
+        )
+        if cur.rowcount != 1:
+            # Completed or deleted by the partner a moment ago.
+            conn.rollback()
+            current = fetch_task_row(conn, task_id)
+            if current["is_completed"]:
+                raise ConflictError("這顆泡泡剛剛被完成了，會留在共同紀錄裡，不能刪除")
+            raise ConflictError("這顆泡泡剛剛被修改了，請再試一次")
+        # 解除配對，另一顆泡泡不會再指向一顆看不到的泡泡
         conn.execute("UPDATE tasks SET matched_task_id = NULL WHERE matched_task_id = ?", (task_id,))
-        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
-        return {"deleted": True}
+        return {"deleted": True, "id": task_id}
+
+
+def restore_task(task_id: int, user_id: int | None = None) -> dict:
+    """Undo a delete (used by the toast's 「復原」 button)."""
+    user_id = require_user(user_id)
+    with connect() as conn:
+        task = fetch_task_row(conn, task_id, include_deleted=True)
+        ensure_task_member(conn, task, user_id)
+        ensure_task_visible(task, user_id)
+        if not task["deleted_at"]:
+            return _load_task(task_id)
+        deleted_at = parse_dt(task["deleted_at"])
+        if deleted_at is None or utc_now_dt() - deleted_at > RESTORE_WINDOW:
+            raise ConflictError("刪除超過一天，已經無法復原")
+        conn.execute(
+            "UPDATE tasks SET deleted_at = NULL, deleted_by_id = NULL, updated_at = ? WHERE id = ?",
+            (utc_now(), task_id),
+        )
+        match_similar_tasks(conn, task_id)
+        conn.commit()
+        return _load_task(task_id)
+
+
+def reopen_task(task_id: int, user_id: int | None = None) -> dict:
+    """Undo a completion shortly after it happened (an accidental long press, for example).
+
+    Takes back the stardust it earned and the shared footprint it created. Refused once the
+    stardust has already been spent, so the jar can never go negative.
+    """
+    user_id = require_user(user_id)
+    with connect() as conn:
+        task = fetch_task_row(conn, task_id)
+        ensure_task_member(conn, task, user_id)
+        ensure_task_visible(task, user_id)
+        if not task["is_completed"]:
+            return _load_task(task_id)
+        if task["completed_by_id"] != user_id:
+            raise ValidationError("只有完成這顆泡泡的人可以復原")
+        completed_at = parse_dt(task["completed_at"])
+        if completed_at is None or utc_now_dt() - completed_at > REOPEN_WINDOW:
+            raise ConflictError("完成超過 15 分鐘，已經無法復原")
+        dust = int(task["stardust_awarded"] or 0)
+        now = utc_now()
+        # 餘額檢查和更新在同一個指令裡，和兌換同時發生也不會讓星塵變成負的
+        cur = conn.execute(
+            """
+            UPDATE tasks
+            SET is_completed = 0, completed_at = NULL, completed_by_id = NULL,
+                confirmed = 0, confirmed_at = NULL, confirmed_by_id = NULL,
+                stardust_awarded = 0, updated_at = ?
+            WHERE id = ? AND is_completed = 1 AND deleted_at IS NULL
+              AND (SELECT COALESCE(SUM(stardust_awarded), 0) FROM tasks WHERE couple_id = ?) - ?
+                  >= (SELECT COALESCE(SUM(cost), 0) FROM reward_redemptions WHERE couple_id = ?)
+            """,
+            (now, task_id, task["couple_id"], dust, task["couple_id"]),
+        )
+        if cur.rowcount != 1:
+            raise ConflictError("這顆泡泡換來的星塵已經用掉了，無法復原")
+        conn.execute("DELETE FROM shared_footprints WHERE bubble_id = ?", (task_id,))
+        conn.commit()
+        return _load_task(task_id)
 
 
 def get_stats(couple_id: int = 1, user_id: int | None = None) -> dict:
@@ -1166,7 +1320,7 @@ def get_stats(couple_id: int = 1, user_id: int | None = None) -> dict:
                 SUM(CASE WHEN is_private = 0 THEN 1 ELSE 0 END) AS shared,
                 ROUND(AVG(priority_weight), 1) AS average_weight
             FROM tasks
-            WHERE couple_id = ? {visibility}
+            WHERE couple_id = ? AND deleted_at IS NULL {visibility}
             """,
             params,
         ).fetchone()
@@ -1176,7 +1330,7 @@ def get_stats(couple_id: int = 1, user_id: int | None = None) -> dict:
             """
             SELECT created_by_id, COUNT(*) AS count
             FROM tasks
-            WHERE couple_id = ? AND is_private = 1 AND is_completed = 0
+            WHERE couple_id = ? AND is_private = 1 AND is_completed = 0 AND deleted_at IS NULL
             GROUP BY created_by_id
             """,
             (couple_id,),
@@ -1230,7 +1384,7 @@ def tokenize_title(title: str) -> set[str]:
 
 def match_similar_tasks(conn: sqlite3.Connection, task_id: int) -> None:
     task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    if not task or task["is_private"]:
+    if not task or task["is_private"] or task["deleted_at"]:
         return
 
     tokens = tokenize_title(task["title"])
@@ -1241,12 +1395,140 @@ def match_similar_tasks(conn: sqlite3.Connection, task_id: int) -> None:
         """
         SELECT id, title
         FROM tasks
-        WHERE id != ? AND couple_id = ? AND is_private = 0 AND is_completed = 0
+        WHERE id != ? AND couple_id = ? AND is_private = 0 AND is_completed = 0 AND deleted_at IS NULL
+        ORDER BY (matched_task_id IS NOT NULL), id
         """,
         (task_id, task["couple_id"]),
     ).fetchall()
+    if task["matched_task_id"]:
+        return  # already paired; renames clear the pair before calling this
     for candidate in candidates:
         if tokens.intersection(tokenize_title(candidate["title"])):
+            # A bubble belongs to at most one pair: drop any older pair either side was in.
+            conn.execute(
+                "UPDATE tasks SET matched_task_id = NULL WHERE matched_task_id IN (?, ?)",
+                (task_id, candidate["id"]),
+            )
             conn.execute("UPDATE tasks SET matched_task_id = ? WHERE id = ?", (candidate["id"], task_id))
             conn.execute("UPDATE tasks SET matched_task_id = ? WHERE id = ?", (task_id, candidate["id"]))
             return
+
+
+# --- One-request start-up and cheap change detection ---------------------------------
+
+
+def _active_couple_id(conn: sqlite3.Connection, user_id: int) -> int | None:
+    row = conn.execute(
+        """
+        SELECT id FROM couples
+        WHERE status = 'active' AND (partner_a_id = ? OR partner_b_id = ?)
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def data_version(user_id: int) -> str:
+    """A short fingerprint of everything this user's screens show.
+
+    It changes whenever a bubble, handbook entry, footprint, redemption or invite changes,
+    so clients can poll it every few seconds and only reload when something happened.
+    """
+    user_id = int(user_id)
+    with connect() as conn:
+        user = conn.execute("SELECT id, username, email FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            raise UserNotFoundError("找不到這個使用者")
+        parts = [f"user:{user['username']}"]
+        couple_id = _active_couple_id(conn, user_id)
+        if couple_id:
+            names = conn.execute(
+                """
+                SELECT a.username AS a_name, b.username AS b_name
+                FROM couples c
+                JOIN users a ON a.id = c.partner_a_id
+                JOIN users b ON b.id = c.partner_b_id
+                WHERE c.id = ?
+                """,
+                (couple_id,),
+            ).fetchone()
+            parts.append(f"couple:{couple_id}:{names['a_name']}:{names['b_name']}")
+            for table in ("tasks", "partner_manual_entries", "shared_footprints"):
+                row = conn.execute(
+                    f"SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS m FROM {table} WHERE couple_id = ?",
+                    (couple_id,),
+                ).fetchone()
+                parts.append(f"{table}:{row['n']}:{row['m']}")
+            row = conn.execute(
+                "SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS m FROM reward_redemptions WHERE couple_id = ?",
+                (couple_id,),
+            ).fetchone()
+            parts.append(f"rewards:{row['n']}:{row['m']}")
+        else:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS m
+                FROM couple_invites
+                WHERE inviter_id = ? OR lower(invitee_email) = lower(?)
+                """,
+                (user_id, user["email"]),
+            ).fetchone()
+            parts.append(f"invites:{row['n']}:{row['m']}")
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def completed_summary(couple_id: int, user_id: int | None = None) -> dict:
+    clause, params = visible_task_clause(user_id)
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT t.completed_by_id AS user_id, COUNT(*) AS count
+            FROM tasks t
+            WHERE t.couple_id = ? AND t.is_completed = 1 AND t.deleted_at IS NULL AND {clause}
+            GROUP BY t.completed_by_id
+            """,
+            [couple_id, *params],
+        ).fetchall()
+    by_user = {str(row["user_id"]): row["count"] for row in rows if row["user_id"] is not None}
+    return {"total": sum(row["count"] for row in rows), "by_user": by_user}
+
+
+def bootstrap(user_id: int) -> dict:
+    """Everything the app needs on open, in one request instead of four round trips."""
+    user_id = int(user_id)
+    # Fingerprint first: if something changes while the rest is read, the next poll
+    # sees a newer fingerprint and reloads, instead of missing the change.
+    version = data_version(user_id)
+    user = get_user(user_id)
+    result = {
+        "version": version,
+        "user": user,
+        "couple": None,
+        "tasks": [],
+        "stats": None,
+        "completed_summary": {"total": 0, "by_user": {}},
+        "manual_count": 0,
+    }
+    with connect() as conn:
+        couple_id = _active_couple_id(conn, user_id)
+    if not couple_id:
+        return result
+    couple = get_couple(couple_id)
+    partner_id = couple["partner_b_id"] if couple["partner_a_id"] == user_id else couple["partner_a_id"]
+    with connect() as conn:
+        manual_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM partner_manual_entries WHERE couple_id = ? AND subject_user_id = ?",
+            (couple_id, partner_id),
+        ).fetchone()["n"]
+    result.update(
+        {
+            "couple": couple,
+            "tasks": list_tasks(couple_id=couple_id, user_id=user_id, view="all"),
+            "stats": get_stats(couple_id, user_id=user_id),
+            "completed_summary": completed_summary(couple_id, user_id),
+            "manual_count": manual_count,
+        }
+    )
+    return result

@@ -15,13 +15,18 @@ import TaskForm from "./components/TaskForm.jsx";
 import Toast from "./components/Toast.jsx";
 import TopBar from "./components/TopBar.jsx";
 import { GATED_TABS } from "./constants.js";
+import { clearPendingInvite, readPendingInvite } from "./utils/invite.js";
 
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
 const LOCAL_REVIEW_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const REVIEW_MODE = LOCAL_REVIEW_HOSTS.has(window.location.hostname) && SEARCH_PARAMS.get("review") === "1";
 const AUTH_STORAGE_KEY = "sync-us-auth";
 const AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// How often to ask the server "did anything change?" (a tiny request).
+const POLL_PAIRED_MS = 5000;
+const POLL_WAITING_MS = 3000;
 const NO_LOCKS = new Set();
+const EMPTY_SUMMARY = { total: 0, by_user: {} };
 
 function readStoredAuth() {
   try {
@@ -59,31 +64,44 @@ function PageSkeleton() {
   );
 }
 
+function withTask(list, task) {
+  return list.some((item) => item.id === task.id) ? list.map((item) => (item.id === task.id ? task : item)) : [...list, task];
+}
+
+function withoutTask(list, taskId) {
+  return list.filter((item) => item.id !== taskId);
+}
+
 export default function App() {
   const [activeUser, setActiveUser] = useState(() => readStoredAuth()?.userId || (REVIEW_MODE ? 1 : null));
   const [me, setMe] = useState(null);
   const [couple, setCouple] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [completed, setCompleted] = useState([]);
+  const [completedSummary, setCompletedSummary] = useState(EMPTY_SUMMARY);
   const [stats, setStats] = useState(null);
   const [manualRequired, setManualRequired] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [taskFormDate, setTaskFormDate] = useState(null);
   const [detailTaskId, setDetailTaskId] = useState(null);
+  const [editTaskId, setEditTaskId] = useState(null);
   const [completionTask, setCompletionTask] = useState(null);
   const [toast, setToast] = useState(null);
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const loadSeq = useRef(0);
+  const versionRef = useRef("");
+  const mutating = useRef(0);
   const activeUserRef = useRef(activeUser);
   activeUserRef.current = activeUser;
 
   const isAuthenticated = Boolean(activeUser);
   const refresh = useCallback(() => setRefreshTick((tick) => tick + 1), []);
-  const showToast = useCallback((message, tone = "info") => {
-    setToast({ message, tone, id: Date.now() + Math.random() });
+  const showToast = useCallback((message, tone = "info", action = null) => {
+    setToast({ message, tone, action, id: Date.now() + Math.random() });
   }, []);
   const clearToast = useCallback(() => setToast(null), []);
 
@@ -101,83 +119,93 @@ export default function App() {
   const stardust = stats?.stardust || 0;
   const lockedTabs = !loaded ? NO_LOCKS : !couple || manualRequired ? GATED_TABS : NO_LOCKS;
   const detailTask = tasks.find((task) => task.id === detailTaskId) || null;
+  const editTask = tasks.find((task) => task.id === editTaskId) || null;
 
-  const logout = useCallback(() => {
-    loadSeq.current += 1; // any load still in flight must not log the old user back in
-    activeUserRef.current = null;
-    clearStoredAuth();
-    setActiveUser(null);
+  // Nothing from the previous account may linger: an undo toast or an open sheet would
+  // otherwise act (and show titles) under the next account on the same device.
+  const resetSession = useCallback(() => {
+    loadSeq.current += 1; // any load still in flight must not apply to the next account
+    mutating.current = 0;
+    versionRef.current = "";
     setMe(null);
     setCouple(null);
     setTasks([]);
-    setCompleted([]);
+    setCompletedSummary(EMPTY_SUMMARY);
     setStats(null);
+    setToast(null);
+    setCompletionTask(null);
+    setDetailTaskId(null);
+    setEditTaskId(null);
+    setTaskFormDate(null);
+    setError("");
     setLoaded(false);
     setActiveTab("home");
   }, []);
+
+  const logout = useCallback(() => {
+    activeUserRef.current = null;
+    clearStoredAuth();
+    resetSession();
+    setActiveUser(null);
+  }, [resetSession]);
+
+  // A change made here shows up at once; loads that started before it finishes are
+  // discarded, and one fresh load runs after it so both screens agree again.
+  const beginMutation = useCallback(() => {
+    mutating.current += 1;
+    loadSeq.current += 1;
+  }, []);
+  const endMutation = useCallback(() => {
+    mutating.current = Math.max(0, mutating.current - 1);
+    if (mutating.current === 0) refresh();
+  }, [refresh]);
 
   async function load() {
     const userId = Number(activeUser);
     const seq = ++loadSeq.current;
     const stale = () => seq !== loadSeq.current || Number(activeUserRef.current) !== userId;
 
-    let user;
+    let data;
     try {
-      user = await request(`/users/${userId}`);
+      data = await request(`/bootstrap?user_id=${userId}`);
     } catch (err) {
       if (stale()) return;
-      if (err.status === 404) {
+      if (err.code === "user_not_found") {
         // The stored account no longer exists (for example after a database reset).
+        // Other 404s (e.g. a server still running the previous version) must not sign out.
         logout();
         return;
       }
-      setError(err.message);
+      if (err.status === 0) setOffline(true);
+      // With data already on screen a short outage only needs the offline banner.
+      if (!loaded || err.status !== 0) setError(err.message);
       setLoaded(true);
       return;
     }
+    if (stale() || mutating.current > 0) return;
 
-    try {
-      let coupleData = null;
-      try {
-        const userCouple = await request(`/couples/user/${userId}`);
-        coupleData = await request(`/couples/${userCouple.id}`);
-      } catch (err) {
-        if (err.status !== 404) throw err;
+    versionRef.current = data.version;
+    setMe(data.user);
+    setCouple(data.couple);
+    setTasks(data.tasks || []);
+    setStats(data.stats);
+    setCompletedSummary(data.completed_summary || EMPTY_SUMMARY);
+    if (!data.couple) {
+      setManualRequired(false);
+      setActiveTab((tab) => (GATED_TABS.has(tab) ? "partner" : tab));
+    } else {
+      const needsManual = !REVIEW_MODE && Number(data.manual_count) === 0;
+      setManualRequired(needsManual);
+      if (needsManual) setActiveTab((tab) => (GATED_TABS.has(tab) ? "partner" : tab));
+      if (pendingInvite) {
+        clearPendingInvite();
+        setPendingInvite("");
       }
-      if (stale()) return;
-      setMe(user);
-      setCouple(coupleData);
-
-      if (!coupleData) {
-        setTasks([]);
-        setCompleted([]);
-        setStats(null);
-        setManualRequired(false);
-        setActiveTab((tab) => (GATED_TABS.has(tab) ? "partner" : tab));
-      } else {
-        const cid = coupleData.id;
-        const [taskData, doneData, statData, manualData] = await Promise.all([
-          request(`/tasks?couple_id=${cid}&user_id=${userId}&view=all`),
-          request(`/tasks/completed?couple_id=${cid}&user_id=${userId}&view=all`),
-          request(`/stats?couple_id=${cid}&user_id=${userId}`),
-          request(`/couples/${cid}/manual?user_id=${userId}`),
-        ]);
-        if (stale()) return;
-        setTasks(taskData);
-        setCompleted(doneData);
-        setStats(statData);
-        const needsManual = !REVIEW_MODE && (manualData.entries || []).length === 0;
-        setManualRequired(needsManual);
-        if (needsManual) setActiveTab((tab) => (GATED_TABS.has(tab) ? "partner" : tab));
-      }
-      setError("");
-      setLoaded(true);
-      if (!REVIEW_MODE) writeStoredAuth(userId);
-    } catch (err) {
-      if (stale()) return;
-      setError(err.message);
-      setLoaded(true);
     }
+    setError("");
+    setOffline(false);
+    setLoaded(true);
+    if (!REVIEW_MODE) writeStoredAuth(userId);
   }
 
   useEffect(() => {
@@ -185,30 +213,52 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser, refreshTick]);
 
-  // Refresh when coming back to the app (phones often don't fire "focus").
-  useEffect(() => {
-    if (!isAuthenticated) return undefined;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [isAuthenticated, refresh]);
-
-  // Waiting for the partner to accept: check every few seconds.
-  // Paired: pick up the partner's new bubbles every 45 seconds while the page is visible.
+  // Poll the tiny /version fingerprint and reload only when something changed —
+  // the partner's new bubbles appear within a few seconds without reloading everything.
+  const coupleId = couple?.id || 0;
   useEffect(() => {
     if (!isAuthenticated || !loaded) return undefined;
-    const interval = couple ? 45000 : 4000;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, interval);
-    return () => window.clearInterval(timer);
-  }, [isAuthenticated, loaded, couple, refresh]);
+    let cancelled = false;
+    let busy = false;
+
+    async function check() {
+      if (busy || cancelled || document.visibilityState !== "visible" || mutating.current > 0) return;
+      busy = true;
+      try {
+        const result = await request(`/version?user_id=${activeUser}`, { timeout: 6000 });
+        if (cancelled) return;
+        setOffline(false);
+        if (result.version !== versionRef.current) refresh();
+      } catch (err) {
+        if (cancelled) return;
+        if (err.code === "user_not_found") logout();
+        else if (err.status === 0) setOffline(true);
+      } finally {
+        busy = false;
+      }
+    }
+
+    const timer = window.setInterval(check, coupleId ? POLL_PAIRED_MS : POLL_WAITING_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    window.addEventListener("focus", check);
+    window.addEventListener("online", check);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("online", check);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isAuthenticated, loaded, coupleId, activeUser, refresh, logout]);
+
+  useEffect(() => {
+    const goOffline = () => setOffline(true);
+    window.addEventListener("offline", goOffline);
+    return () => window.removeEventListener("offline", goOffline);
+  }, []);
 
   function changeTab(next) {
     if (lockedTabs.has(next)) {
@@ -225,48 +275,127 @@ export default function App() {
     setTaskFormDate(date instanceof Date ? date : new Date());
   }
 
-  function handleCompleted(done) {
-    refresh();
+  function postJson(path, body) {
+    return request(path, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  function stillSameUser(userId) {
+    return Number(activeUserRef.current) === userId;
+  }
+
+  function announceCompleted(done) {
     const dust = Number(done?.stardust_awarded) || 0;
-    if (done && !done.is_private) {
-      setCompletionTask(done);
-      if (dust > 0) showToast(`泡泡完成了，+${dust} 星塵 ✨`);
-    } else {
-      showToast(dust > 0 ? `私人泡泡完成了，+${dust} 星塵 ✨` : "私人泡泡完成了 ✨");
+    const label = done?.is_private ? "私人泡泡完成了" : "泡泡完成了";
+    showToast(dust > 0 ? `${label}，+${dust} 星塵 ✨` : `${label} ✨`, "info", {
+      label: "復原",
+      onClick: () => undoComplete(done),
+    });
+    if (done && !done.is_private) setCompletionTask(done);
+  }
+
+  // Detail sheet "完成" button: the bubble leaves the screen immediately.
+  async function completeTask(task) {
+    const userId = Number(activeUser);
+    beginMutation();
+    setDetailTaskId(null);
+    setTasks((list) => withoutTask(list, task.id));
+    try {
+      const done = await postJson(`/tasks/${task.id}/complete`, { user_id: userId });
+      if (stillSameUser(userId)) announceCompleted(done);
+    } catch (err) {
+      if (stillSameUser(userId)) {
+        setTasks((list) => withTask(list, task));
+        showToast(err.message, "error");
+      }
+    } finally {
+      endMutation();
     }
   }
 
-  async function completeTask(task) {
+  // Long-press pop in the starfield: the request runs during the pop animation, and the
+  // bubble is removed once the stardust has finished falling.
+  async function popTask(task, animationDone) {
+    const userId = Number(activeUser);
+    beginMutation();
     try {
-      const done = await request(`/tasks/${task.id}/complete`, {
-        method: "POST",
-        body: JSON.stringify({ user_id: Number(activeUser) }),
-      });
-      setDetailTaskId(null);
-      handleCompleted(done);
+      const done = await postJson(`/tasks/${task.id}/complete`, { user_id: userId });
+      await animationDone;
+      if (!stillSameUser(userId)) return;
+      setTasks((list) => withoutTask(list, task.id));
+      announceCompleted(done);
     } catch (err) {
-      showToast(err.message, "error");
+      if (stillSameUser(userId)) showToast(err.message || "完成失敗，請再試一次。", "error");
+      throw err;
+    } finally {
+      endMutation();
+    }
+  }
+
+  async function undoComplete(done) {
+    const userId = Number(activeUser);
+    beginMutation();
+    setCompletionTask((current) => (current?.id === done.id ? null : current));
+    try {
+      const reopened = await postJson(`/tasks/${done.id}/reopen`, { user_id: userId });
+      if (!stillSameUser(userId)) return;
+      setTasks((list) => withTask(list, reopened));
+      showToast(`「${reopened.title}」回到星域了`);
+    } catch (err) {
+      if (stillSameUser(userId)) showToast(err.message, "error");
+    } finally {
+      endMutation();
     }
   }
 
   async function deleteTask(task) {
+    const userId = Number(activeUser);
+    beginMutation();
+    setDetailTaskId(null);
+    setTasks((list) => withoutTask(list, task.id));
     try {
-      await request(`/tasks/${task.id}?user_id=${activeUser}`, { method: "DELETE" });
-      setDetailTaskId(null);
-      refresh();
-      showToast(`已刪除「${task.title}」`);
+      await request(`/tasks/${task.id}?user_id=${userId}`, { method: "DELETE" });
+      if (stillSameUser(userId)) {
+        showToast(`已刪除「${task.title}」`, "info", { label: "復原", onClick: () => restoreTask(task) });
+      }
     } catch (err) {
-      showToast(err.message, "error");
+      if (stillSameUser(userId)) {
+        setTasks((list) => withTask(list, task));
+        showToast(err.message, "error");
+      }
+    } finally {
+      endMutation();
     }
+  }
+
+  async function restoreTask(task) {
+    const userId = Number(activeUser);
+    beginMutation();
+    try {
+      const restored = await postJson(`/tasks/${task.id}/restore`, { user_id: userId });
+      if (!stillSameUser(userId)) return;
+      setTasks((list) => withTask(list, restored));
+      showToast(`「${restored.title}」回來了`);
+    } catch (err) {
+      if (stillSameUser(userId)) showToast(err.message, "error");
+    } finally {
+      endMutation();
+    }
+  }
+
+  function handleSaved(task, message) {
+    setTasks((list) => withTask(list, task));
+    showToast(message);
+    refresh();
   }
 
   if (!isAuthenticated) {
     return (
       <AuthScreen
+        pendingInvite={pendingInvite}
         onAuthenticated={(user) => {
           writeStoredAuth(user.id);
           setLoaded(false);
-          setActiveTab("home");
+          setActiveTab(pendingInvite ? "partner" : "home");
           setActiveUser(user.id);
         }}
       />
@@ -286,13 +415,12 @@ export default function App() {
         stardust={stardust}
         onAddTask={openTaskForm}
         onOpenTask={(task) => setDetailTaskId(task.id)}
-        onTaskCompleted={handleCompleted}
+        onPopTask={popTask}
         onOpenDate={(date) => {
           setSelectedDate(date);
           changeTab("tasks");
         }}
         onSeeAll={() => changeTab("tasks")}
-        onError={(message) => showToast(message, "error")}
       />
     );
   } else if (activeTab === "tasks") {
@@ -315,8 +443,15 @@ export default function App() {
         couple={couple}
         activeUser={activeUser}
         manualRequired={manualRequired}
+        pendingInvite={pendingInvite}
+        onInviteHandled={() => {
+          clearPendingInvite();
+          setPendingInvite("");
+        }}
         onRefresh={refresh}
         onConnected={async () => {
+          clearPendingInvite();
+          setPendingInvite("");
           await load();
           showToast("連結完成！歡迎來到你們的星域 ✨");
         }}
@@ -333,11 +468,11 @@ export default function App() {
         partner={partner}
         couple={couple}
         tasks={tasks}
-        completed={completed}
+        completedSummary={completedSummary}
         stardust={stardust}
         reviewMode={REVIEW_MODE}
         onSwitchUser={(userId) => {
-          setLoaded(false);
+          resetSession();
           setActiveUser(userId);
         }}
         onGoPartner={() => changeTab("partner")}
@@ -360,7 +495,13 @@ export default function App() {
       <div className="app-column">
         <TopBar members={couple ? members : []} onTabChange={changeTab} />
         <main id="main" className={`page page-${activeTab}`} tabIndex={-1}>
-          {error && (
+          {offline && (
+            <div className="banner banner-offline" role="status">
+              <span>目前連不上 Sync-Us，恢復連線後會自動更新。</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={refresh}>重試</button>
+            </div>
+          )}
+          {error && !offline && (
             <div className="banner banner-error" role="alert">
               <span>{error}</span>
               <button type="button" className="btn btn-ghost btn-sm" onClick={refresh}>重試</button>
@@ -379,10 +520,25 @@ export default function App() {
             coupleId={couple.id}
             defaultDate={taskFormDate}
             onCancel={() => setTaskFormDate(null)}
-            onCreated={(task) => {
+            onSaved={(task) => {
               setTaskFormDate(null);
-              refresh();
-              showToast(`「${task.title}」長出來了 🫧`);
+              handleSaved(task, `「${task.title}」長出來了 🫧`);
+            }}
+          />
+        </Modal>
+      )}
+
+      {editTask && couple && (
+        <Modal kicker="泡泡" title="編輯泡泡" onClose={() => setEditTaskId(null)}>
+          <TaskForm
+            task={editTask}
+            members={members}
+            activeUser={activeUser}
+            coupleId={couple.id}
+            onCancel={() => setEditTaskId(null)}
+            onSaved={(task) => {
+              setEditTaskId(null);
+              handleSaved(task, `已更新「${task.title}」`);
             }}
           />
         </Modal>
@@ -396,6 +552,10 @@ export default function App() {
           activeUser={activeUser}
           onClose={() => setDetailTaskId(null)}
           onComplete={completeTask}
+          onEdit={(task) => {
+            setDetailTaskId(null);
+            setEditTaskId(task.id);
+          }}
           onDelete={deleteTask}
         />
       )}
@@ -404,6 +564,7 @@ export default function App() {
         task={completionTask}
         activeUser={activeUser}
         onClose={() => setCompletionTask(null)}
+        onUndo={(task) => undoComplete(task)}
         onSaved={(message) => {
           refresh();
           if (message) showToast(message);

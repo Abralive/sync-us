@@ -1,0 +1,24 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="g1" cx="36%" cy="30%" r="72%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.32" stop-color="#c4e2da"/>
+      <stop offset="1" stop-color="#6fa89c"/>
+    </radialGradient>
+    <radialGradient id="g2" cx="36%" cy="30%" r="72%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.32" stop-color="#f9d8cf"/>
+      <stop offset="1" stop-color="#e98f7b"/>
+    </radialGradient>
+  </defs>
+  
+  <g transform="translate(256 256) scale(1) translate(-256 -256)">
+    <circle cx="204" cy="270" r="120" fill="url(#g1)"/>
+    <circle cx="316" cy="246" r="120" fill="url(#g2)" fill-opacity="0.9"/>
+    <circle cx="204" cy="270" r="120" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="7"/>
+    <circle cx="316" cy="246" r="120" fill="none" stroke="#ffffff" stroke-opacity="0.85" stroke-width="7"/>
+    <ellipse cx="160" cy="214" rx="30" ry="18" fill="#ffffff" fill-opacity="0.85" transform="rotate(-28 160 214)"/>
+    <path d="M404 118 l10 25 25 10 -25 10 -10 25 -10 -25 -25 -10 25 -10z" fill="#e2b85c"/>
+  </g>
+</svg>

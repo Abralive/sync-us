@@ -1,10 +1,10 @@
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
 import { compressImage } from "../utils/image.js";
 import Modal from "./Modal.jsx";
 
-export default function CompletionRecordModal({ task, activeUser, onClose, onSaved }) {
+export default function CompletionRecordModal({ task, activeUser, onClose, onSaved, onUndo }) {
   const [note, setNote] = useState("");
   const [photoDataUrl, setPhotoDataUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +41,7 @@ export default function CompletionRecordModal({ task, activeUser, onClose, onSav
       await request(`/tasks/${task.id}/footprint`, {
         method: "POST",
         body: JSON.stringify({ user_id: Number(activeUser), note: note.trim(), photo_data_url: photoDataUrl }),
+        timeout: 60000, // a photo can take a while on a slow phone connection
       });
       onSaved?.("已經留下共同足跡");
       onClose();
@@ -94,6 +95,13 @@ export default function CompletionRecordModal({ task, activeUser, onClose, onSav
       </label>
 
       {error && <div className="form-error" role="alert">{error}</div>}
+
+      {onUndo && (
+        <button type="button" className="link-btn undo-link" onClick={() => onUndo(task)} disabled={busy}>
+          <Undo2 size={15} aria-hidden="true" />
+          不小心戳破了？復原這顆泡泡
+        </button>
+      )}
     </Modal>
   );
 }

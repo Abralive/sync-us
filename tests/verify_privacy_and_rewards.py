@@ -79,7 +79,7 @@ def main():
         first = make("整理 旅行 清單", mina)
         second = make("旅行 住宿", kai)
         assert services.get_task(first["id"])["matched_task_id"] == second["id"]
-        assert services.delete_task(second["id"], mina["id"]) == {"deleted": True}
+        assert services.delete_task(second["id"], mina["id"])["deleted"] is True
         assert services.get_task(first["id"])["matched_task_id"] is None
 
         # turning a matched bubble private removes the match on both sides

@@ -8,28 +8,34 @@ Sync-Us 正式網域目標：
 
 ## 本機服務
 
-啟動 Sync-Us：
+建議設定成登入 Windows 後自動在背景啟動（只需要做一次）：
+
+```text
+deploy\windows\install_autostart.bat
+```
+
+手動啟動（關掉視窗就會停止）：
 
 ```powershell
 cd C:\Users\user\Downloads\sync
-.\start_sync_us.bat
+.\start_syncus_8051.bat
 ```
 
-或直接指定 port：
+Sync-Us 預設只監聽 `127.0.0.1:8051`，外部連線一律經過 Cloudflare Tunnel。
+
+確認本機服務與最近的日誌：
+
+```text
+deploy\windows\status.bat
+```
+
+或：
 
 ```powershell
-$env:SYNC_US_PORT = "8051"
-$env:SYNC_US_HOST = "0.0.0.0"
-python run_sync_us.py
+Invoke-WebRequest -UseBasicParsing http://localhost:8051/robots.txt
 ```
 
-確認本機服務：
-
-```powershell
-Invoke-WebRequest -UseBasicParsing http://localhost:8051/
-```
-
-回傳 `200` 代表 Cloudflare Tunnel 可以轉進這台電腦的 Sync-Us 服務。
+回傳 `200` 代表 Cloudflare Tunnel 可以轉進這台電腦的 Sync-Us 服務。網域出現 502 時，先看 `status.bat` 的結果。
 
 ## Cloudflare Tunnel
 
@@ -57,4 +63,5 @@ Restart-Service cloudflared
 - API 使用 same-origin `/api/v1`，不要寫死 `127.0.0.1`
 - 手機版檢查 `375px / 390px / 430px`
 - 若不是公開展示，需加 Cloudflare Access 或正式登入保護
-- SQLite 正式使用前要有備份策略
+- 已設定外層帳密（`SYNC_US_USER` / `SYNC_US_PASS`），啟動日誌沒有「沒有設定」的警告
+- `backups` 資料夾每天有新的備份（啟動時與每 24 小時自動備份，保留 14 份）

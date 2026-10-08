@@ -12,6 +12,8 @@ Sync-Us 是一個以情侶共同生活為核心的開源 Web App。它不把生�
 - **星塵獎勵**：在首頁長按戳破完成的泡泡，將完成感轉化為可累積的星塵，並在商城兌換（兌換紀錄會保存）。
 - **隱私邊界**：私人泡泡只有建立者看得到，對方只會知道數量；配對資料由後端驗證成員權限。
 - **手機與電腦**：手機用底部導覽、電腦用左側導覽，星域、泡泡清單與手冊都有對應的版面。
+- **即時又不怕按錯**：打開只要一個請求；對方的變更幾秒內自動出現；完成、刪除都能馬上「復原」，泡泡也可以編輯。
+- **像 App 一樣使用**：可以加到手機主畫面；邀請伴侶時直接分享連結，對方點開就帶入邀請碼。
 
 ## 技術架構
 
@@ -41,7 +43,7 @@ run_sync_us.py            應用程式啟動入口
 
 ## 本機啟動
 
-需求：Python 3.11+、Node.js 20.19+ 或 22.12+。
+需求：Python 3.10+、Node.js 20.19+ 或 22.12+。
 
 ```powershell
 git clone https://github.com/Abralive/sync-us.git
@@ -54,7 +56,9 @@ python run_sync_us.py
 
 瀏覽器開啟：<http://127.0.0.1:8051>
 
-第一次啟動會在專案根目錄建立本機 SQLite 資料庫。資料庫、環境變數、建置產物與 `node_modules` 都不會提交到 Git。
+第一次啟動會在專案根目錄建立本機 SQLite 資料庫（WAL 模式），並在 `backups/` 每天自動備份、保留 14 份。資料庫、備份、日誌、環境變數、建置產物與 `node_modules` 都不會提交到 Git。
+
+Windows 上想要登入後自動在背景執行，執行一次 `deploy\windows\install_autostart.bat`；網域打不開時執行 `deploy\windows\status.bat` 查看原因。
 
 ## 驗證
 
@@ -66,6 +70,7 @@ python -m compileall -q sync_us_app tests
 python tests\verify_couple_invites.py
 python tests\verify_connection_features.py
 python tests\verify_privacy_and_rewards.py
+python tests\verify_speed_and_undo.py
 ```
 
 ## 專案狀態
@@ -81,6 +86,7 @@ python tests\verify_privacy_and_rewards.py
 - [伴侶連結設計](12_Sync-Us_Couple_Link_Phase1.md)
 - [新電腦部署手冊](13_Sync-Us_New_PC_Deployment.md)
 - [RWD 改版與問題修復報告](15_Sync-Us_RWD_Bugfix_Report.md)
+- [速度、使用體驗與架設優化報告](16_Sync-Us_Speed_UX_Hosting_Report.md)
 
 ## License
 

@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronRight, Lock, Plus, Sparkles } from "lucide-react";
+import { CalendarDays, ChevronRight, Lock, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { REWARD_PREVIEW, bubbleTone } from "../constants.js";
 import { bubbleCapacity, layoutBubbles } from "../utils/bubbleLayout.js";
@@ -56,6 +56,86 @@ function useElementSize(ref) {
   return size;
 }
 
+const TOUR_STEPS = [
+  {
+    title: "泡泡越大，越要先處理",
+    body: "重要度越高、離期限越近，泡泡就越大。一眼就看得出現在該先顧哪一件。",
+  },
+  {
+    title: "點一下看細節，長按戳破完成",
+    body: "按住泡泡，外圈繞滿一圈就會戳破、掉下星塵。不小心戳破了，可以馬上按「復原」。",
+  },
+  {
+    title: "一起看見彼此扛了多少",
+    body: "「今天的我們」會算出兩個人各扛著幾顆泡泡。按「新泡泡」或右下角的＋，就能放進新的事。",
+  },
+];
+
+function tourKey(userId) {
+  return `sync-us-tour-v1:${userId}`;
+}
+
+function readTourDone(userId) {
+  try {
+    return localStorage.getItem(tourKey(userId)) === "done";
+  } catch {
+    return true; // without storage the tour would reappear on every visit
+  }
+}
+
+// First visit to the starfield: three short tips. Never shown again once finished or skipped.
+function CoachCard({ userId }) {
+  const [step, setStep] = useState(0);
+  const [visible, setVisible] = useState(() => !readTourDone(userId));
+  if (!visible) return null;
+
+  function finish() {
+    try {
+      localStorage.setItem(tourKey(userId), "done");
+    } catch {
+      // ignore
+    }
+    setVisible(false);
+  }
+
+  const last = step === TOUR_STEPS.length - 1;
+  const current = TOUR_STEPS[step];
+  return (
+    <section className="card coach-card" aria-labelledby="coach-title" aria-live="polite">
+      <span className="coach-step">
+        <Sparkles size={15} aria-hidden="true" />
+        第 {step + 1} 步，共 {TOUR_STEPS.length} 步
+      </span>
+      <button type="button" className="icon-btn coach-close" onClick={finish} aria-label="關閉導覽">
+        <X size={18} />
+      </button>
+      <h2 id="coach-title">{current.title}</h2>
+      <p>{current.body}</p>
+      <div className="coach-foot">
+        <span className="coach-dots" aria-hidden="true">
+          {TOUR_STEPS.map((item, index) => (
+            <i key={item.title} className={index === step ? "is-active" : ""}></i>
+          ))}
+        </span>
+        <div className="btn-row">
+          {!last && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={finish}>
+              略過
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => (last ? finish() : setStep(step + 1))}
+          >
+            {last ? "開始使用" : "下一步"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Orbits() {
   return (
     <svg className="starfield-orbits" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -74,10 +154,9 @@ export default function BubbleGarden({
   stardust,
   onAddTask,
   onOpenTask,
-  onTaskCompleted,
+  onPopTask,
   onOpenDate,
   onSeeAll,
-  onError,
 }) {
   const [scope, setScope] = useState("shared");
   const fieldRef = useRef(null);
@@ -168,6 +247,8 @@ export default function BubbleGarden({
         </div>
       </header>
 
+      <CoachCard key={me} userId={me} />
+
       <div className="home-grid">
         <section className="card starfield-card" aria-label="泡泡星域">
           <div className="starfield" ref={fieldRef}>
@@ -196,10 +277,8 @@ export default function BubbleGarden({
                     index={index}
                     position={position}
                     members={members}
-                    activeUser={activeUser}
                     onOpenDetails={onOpenTask}
-                    onCompleted={onTaskCompleted}
-                    onError={onError}
+                    onPop={onPopTask}
                   />
                 );
               })

@@ -7,12 +7,14 @@ import {
   Link2,
   Plus,
   Search,
+  Share2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
 import { daysSince, formatDateTime, shortDate } from "../utils/date.js";
+import { inviteLink, normalizeInviteCode } from "../utils/invite.js";
 import Avatar, { AvatarPair } from "./Avatar.jsx";
 import Modal from "./Modal.jsx";
 
@@ -25,14 +27,59 @@ const CATEGORY_ORDER = [
   ["memo", "其他備忘"],
 ];
 
-function PairingPage({ activeUser, onConnected }) {
+function PairingPage({ activeUser, myName, pendingInvite, onInviteHandled, onConnected }) {
   const [inviteCode, setInviteCode] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(pendingInvite || "");
   const [invites, setInvites] = useState([]);
+  const [linkInvite, setLinkInvite] = useState(null);
+  const [inviteLookupFailed, setInviteLookupFailed] = useState(false);
+  const [inviteRetry, setInviteRetry] = useState(0);
+  const [shareFallback, setShareFallback] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const me = Number(activeUser);
+
+  // Opened from an invite link: show who is inviting, so accepting is one tap.
+  useEffect(() => {
+    if (!pendingInvite) {
+      setLinkInvite(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setInviteLookupFailed(false);
+    request(`/couple-invites/code/${encodeURIComponent(pendingInvite)}`)
+      .then((invite) => {
+        if (cancelled) return;
+        if (invite.inviter_id === me) {
+          onInviteHandled?.();
+          return;
+        }
+        if (invite.status !== "pending") {
+          setError("這個邀請連結已經用過或過期了，請對方重新分享一次。");
+          setJoinCode("");
+          onInviteHandled?.();
+          return;
+        }
+        setJoinCode(invite.invite_code);
+        setLinkInvite(invite);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err.status === 404) {
+          setError("找不到這個邀請連結，請對方重新分享一次。");
+          setJoinCode("");
+          onInviteHandled?.();
+          return;
+        }
+        // Server restarting or the phone offline: keep the code and let them retry.
+        setInviteLookupFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvite, me, inviteRetry]);
 
   async function loadInvites() {
     try {
@@ -76,6 +123,49 @@ function PairingPage({ activeUser, onConnected }) {
     }
   }
 
+  // The link opens Sync-Us with the code already filled in; on phones it goes straight
+  // to the share sheet (LINE, Messages, ...).
+  async function shareLink() {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "::1" || host === "[::1]" || /^127\./.test(host)) {
+      // A link to this computer's own address can't open on the partner's phone.
+      setShareFallback("");
+      setError("");
+      setStatus(`你現在用的是這台電腦的本機網址，對方打不開這個連結。請用網域網址打開 Sync-Us 再分享，或直接把邀請碼 ${visibleCode} 傳給對方。`);
+      return;
+    }
+    const url = inviteLink(visibleCode);
+    const text = `${myName || "我"} 邀請你一起使用 Sync-Us，點開連結就能和我連結（邀請碼 ${visibleCode}）`;
+    setError("");
+    setShareFallback("");
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Sync-Us 邀請", text, url });
+        setStatus("已經打開分享，傳給對方就好。");
+        return;
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      setStatus("邀請連結已複製，貼給對方就好。");
+    } catch {
+      setShareFallback(url);
+      setStatus("無法自動複製，請長按下面的連結複製。");
+    }
+  }
+
+  function acceptLinkInvite() {
+    run(async () => {
+      await request(`/couple-invites/${encodeURIComponent(linkInvite.invite_code)}/accept`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: me }),
+      });
+      await onConnected();
+    });
+  }
+
   return (
     <div className="partner-page">
       <header className="page-head">
@@ -86,20 +176,77 @@ function PairingPage({ activeUser, onConnected }) {
         </div>
       </header>
 
+      {inviteLookupFailed && !linkInvite && (
+        <section className="card link-invite-card" aria-labelledby="link-invite-retry-title">
+          <Sparkles size={20} aria-hidden="true" />
+          <div>
+            <h2 id="link-invite-retry-title">暫時查不到這個邀請（{pendingInvite}）</h2>
+            <p>可能是伺服器正在重新啟動，或網路不穩。邀請碼已經幫你留著，稍後再試一次就好。</p>
+          </div>
+          <div className="btn-row">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setInviteRetry((value) => value + 1)}>
+              再試一次
+            </button>
+          </div>
+        </section>
+      )}
+
+      {linkInvite && (
+        <section className="card link-invite-card" aria-labelledby="link-invite-title">
+          <Sparkles size={20} aria-hidden="true" />
+          <div>
+            <h2 id="link-invite-title">{linkInvite.inviter_name || "對方"} 邀請你一起使用 Sync-Us</h2>
+            <p>接受後，你們會共用同一片星域、泡泡和小手冊；私人泡泡仍然只有自己看得到。</p>
+          </div>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={loading}
+              onClick={() => {
+                setLinkInvite(null);
+                onInviteHandled?.();
+              }}
+            >
+              不是現在
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" disabled={loading} onClick={acceptLinkInvite}>
+              <ShieldCheck size={17} />
+              接受連結
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="pair-grid">
         <section className="card pair-card">
           <span className="step-badge">方法一</span>
-          <h2>產生邀請碼給對方</h2>
-          <p>不用填對方 Email，把邀請碼傳給對方輸入就好，7 天內有效。</p>
+          <h2>把邀請連結傳給對方</h2>
+          <p>不用填對方 Email。對方點開連結、註冊後按「接受」就完成了，7 天內有效。</p>
           {visibleCode ? (
-            <div className="invite-code">
-              <span>你的邀請碼</span>
-              <strong>{visibleCode}</strong>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={copyCode}>
-                <Copy size={16} />
-                複製
+            <>
+              <div className="invite-code">
+                <span>你的邀請碼</span>
+                <strong>{visibleCode}</strong>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={copyCode}>
+                  <Copy size={16} />
+                  複製
+                </button>
+              </div>
+              <button type="button" className="btn btn-primary" onClick={shareLink}>
+                <Share2 size={18} />
+                分享邀請連結
               </button>
-            </div>
+              {shareFallback && (
+                <input
+                  className="share-fallback"
+                  value={shareFallback}
+                  readOnly
+                  aria-label="邀請連結"
+                  onFocus={(event) => event.target.select()}
+                />
+              )}
+            </>
           ) : (
             <button
               type="button"
@@ -116,7 +263,7 @@ function PairingPage({ activeUser, onConnected }) {
               })}
             >
               <Link2 size={18} />
-              產生邀請碼
+              產生邀請連結
             </button>
           )}
         </section>
@@ -130,7 +277,7 @@ function PairingPage({ activeUser, onConnected }) {
               return;
             }
             run(async () => {
-              await request(`/couple-invites/${encodeURIComponent(joinCode.trim().toUpperCase())}/accept`, {
+              await request(`/couple-invites/${encodeURIComponent(normalizeInviteCode(joinCode))}/accept`, {
                 method: "POST",
                 body: JSON.stringify({ user_id: me }),
               });
@@ -461,6 +608,8 @@ export default function CoupleConnect({
   couple,
   activeUser,
   manualRequired,
+  pendingInvite,
+  onInviteHandled,
   onRefresh,
   onConnected,
   showToast,
@@ -498,7 +647,15 @@ export default function CoupleConnect({
   }, [couple?.id, activeUser]);
 
   if (!couple) {
-    return <PairingPage activeUser={activeUser} onConnected={onConnected} />;
+    return (
+      <PairingPage
+        activeUser={activeUser}
+        myName={me?.username}
+        pendingInvite={pendingInvite}
+        onInviteHandled={onInviteHandled}
+        onConnected={onConnected}
+      />
+    );
   }
 
   async function askSync(event) {
