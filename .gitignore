@@ -37,3 +37,6 @@ Thumbs.db
 # Codex/local agent metadata
 .agents/
 .codex/
+
+# Local scratch files (may contain personal data)
+tmp/
