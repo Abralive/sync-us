@@ -157,6 +157,7 @@ export default function BubbleGarden({
   onPopTask,
   onOpenDate,
   onSeeAll,
+  onOpenShop,
 }) {
   const [scope, setScope] = useState("shared");
   const fieldRef = useRef(null);
@@ -377,10 +378,18 @@ export default function BubbleGarden({
           </section>
 
           <section className="card dust-card" aria-labelledby="dust-title">
-            <h2 id="dust-title" className="card-title hand">
-              <Sparkles size={18} />
-              我們的星塵瓶
-            </h2>
+            <div className="card-head">
+              <h2 id="dust-title" className="card-title hand">
+                <Sparkles size={18} />
+                我們的星塵瓶
+              </h2>
+              {onOpenShop && (
+                <button type="button" className="link-btn" onClick={onOpenShop}>
+                  商城
+                  <ChevronRight size={16} />
+                </button>
+              )}
+            </div>
             <div className="dust-body">
               <div className="jar" aria-hidden="true">
                 <span className="jar-cap"></span>

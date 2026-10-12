@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 
-from . import config, services
+from . import config, planner, services
 from .config import AUTH_ENABLED, AUTH_PASSWORD, AUTH_USER, FRONTEND_DIR, FRONTEND_DIST_DIR, INDEX_PATH
 from .database import init_db
 from .maintenance import latest_backup_age, run_maintenance_once, start_maintenance
@@ -37,6 +37,7 @@ PUBLIC_FILES = {
 }
 PUBLIC_PREFIXES = ("/icons/",)
 QUIET_PATHS = ("/api/v1/version", "/robots.txt")
+PLANNER_PREFIX = "/api/v1/planner/"
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("text/javascript", ".js")
@@ -198,9 +199,15 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             self.send_static_file(FRONTEND_DIR, path.removeprefix("/frontend"))
             return
 
+        if path.startswith(PLANNER_PREFIX):
+            self._planner("GET", path, query, {})
+            return
+
         routes = {
             "/api/v1/health": lambda: services.health(),
-            "/api/v1/bootstrap": lambda: services.bootstrap(parse_required_int(query, "user_id")),
+            "/api/v1/bootstrap": lambda: services.bootstrap(
+                parse_required_int(query, "user_id"), query.get("today", [None])[0]
+            ),
             "/api/v1/version": lambda: {"version": services.data_version(parse_required_int(query, "user_id"))},
             "/api/v1/tasks": lambda: services.list_tasks(
                 couple_id=parse_optional_int(query, "couple_id"),
@@ -270,8 +277,11 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
     def _handle_post(self):
         if not self._authorized():
             return self._require_auth()
-        path = urlparse(self.path).path
-        if path == "/api/v1/tasks":
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith(PLANNER_PREFIX):
+            self._planner("POST", path, parse_qs(parsed.query), self.read_json())
+        elif path == "/api/v1/tasks":
             self.call_json(lambda: services.create_task(self.read_json()), 201)
         elif path == "/api/v1/users":
             self.call_json(lambda: services.create_user(self.read_json()), 201)
@@ -326,7 +336,9 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             return self._require_auth()
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
-        if parsed.path.startswith("/api/v1/tasks/"):
+        if parsed.path.startswith(PLANNER_PREFIX):
+            self._planner("PUT", parsed.path, query, self.read_json())
+        elif parsed.path.startswith("/api/v1/tasks/"):
             body = self.read_json()
             user_id = parse_optional_int(query, "user_id") or body.get("user_id")
             self.call_json(lambda: services.update_task(path_id(parsed.path), body, user_id))
@@ -341,12 +353,22 @@ class SyncUsRequestHandler(BaseHTTPRequestHandler):
             return self._require_auth()
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
-        if parsed.path.startswith("/api/v1/tasks/"):
+        if parsed.path.startswith(PLANNER_PREFIX):
+            self._planner("DELETE", parsed.path, query, {})
+        elif parsed.path.startswith("/api/v1/tasks/"):
             self.call_json(
                 lambda: services.delete_task(path_id(parsed.path), parse_optional_int(query, "user_id"))
             )
         else:
             self.send_json({"detail": "Not found"}, 404)
+
+    def _planner(self, method: str, path: str, query: dict, body: dict) -> None:
+        route = planner_route(method, path, query, body)
+        if route is None:
+            self.send_json({"detail": "Not found"}, 404)
+            return
+        callback, status = route
+        self.call_json(callback, status)
 
     # --- responses ------------------------------------------------------------------
 
@@ -499,6 +521,54 @@ def path_text(path: str) -> str:
 
 def segment_id(path: str, index: int) -> int:
     return int(path.rstrip("/").split("/")[index])
+
+
+# --- 雙人週記 routes -------------------------------------------------------------------
+# GET and DELETE take user_id in the query string; POST and PUT in the JSON body (the
+# query string also works, like PUT /tasks). Owner fields in the body are ignored: notes
+# always go to the acting user's own column.
+
+
+def planner_route(method: str, path: str, query: dict, body: dict):
+    """(callback, success status) for a /api/v1/planner/... request, or None if unknown."""
+    parts = tuple(path[len(PLANNER_PREFIX):].strip("/").split("/"))
+    acting = body.get("user_id")
+    if acting in (None, ""):
+        acting = parse_optional_int(query, "user_id")
+
+    if method == "GET" and parts == ("week",):
+        user_id = parse_required_int(query, "user_id")
+        return (lambda: planner.get_week(user_id, query.get("start", [None])[0])), 200
+    if method == "POST" and parts == ("items",):
+        return (lambda: planner.create_item(acting, body)), 201
+    if len(parts) == 2 and parts[0] == "items" and parts[1].isdigit():
+        item_id = int(parts[1])
+        if method == "PUT":
+            return (lambda: planner.update_item(item_id, acting, body)), 200
+        if method == "DELETE":
+            return (lambda: planner.delete_item(item_id, acting)), 200
+    if method == "POST" and len(parts) == 3 and parts[0] == "items" and parts[1].isdigit() and parts[2] == "restore":
+        return (lambda: planner.restore_item(int(parts[1]), acting)), 200
+    if method == "PUT" and len(parts) == 2 and parts[0] == "availability":
+        return (lambda: planner.set_availability(acting, parts[1], body.get("status"))), 200
+    if method == "POST" and parts == ("invitations",):
+        return (lambda: planner.create_invitation(acting, body)), 201
+    if method == "POST" and len(parts) == 3 and parts[0] == "invitations" and parts[1].isdigit():
+        actions = {
+            "accept": planner.accept_invitation,
+            "decline": planner.decline_invitation,
+            "withdraw": planner.withdraw_invitation,
+        }
+        if parts[2] in actions:
+            action = actions[parts[2]]
+            return (lambda: action(int(parts[1]), acting)), 200
+    if method == "POST" and len(parts) == 3 and parts[0] == "shared-items" and parts[1].isdigit() and parts[2] == "cancel":
+        return (lambda: planner.cancel_shared_item(int(parts[1]), acting)), 200
+    if method == "POST" and parts == ("calendar", "import-preview"):
+        return (lambda: planner.preview_import(acting, body)), 200
+    if method == "POST" and parts == ("calendar", "import-confirm"):
+        return (lambda: planner.confirm_import(acting, body)), 200
+    return None
 
 
 def configure_logging() -> None:

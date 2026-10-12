@@ -1,4 +1,4 @@
-"""Database upkeep: online backups and clean-up of deleted bubbles.
+"""Database upkeep: online backups and clean-up of deleted bubbles and weekly notes.
 
 Backups use SQLite's backup API, so they are consistent even while the server is
 writing (copying the .db file by hand can miss data that is still in the WAL file).
@@ -153,6 +153,11 @@ def run_maintenance_once(force_backup: bool = False) -> bool:
     purged = purge_deleted_tasks()
     if purged:
         logger.info("清除了 %s 顆刪除超過 7 天的泡泡", purged)
+    from . import planner  # late import, like services above
+
+    purged_notes = planner.purge_deleted_items()
+    if purged_notes:
+        logger.info("清除了 %s 筆刪除超過 7 天的週記事項", purged_notes)
     write_status_file(True, detail)
     return True
 

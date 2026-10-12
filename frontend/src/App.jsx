@@ -14,7 +14,9 @@ import TaskDetail from "./components/TaskDetail.jsx";
 import TaskForm from "./components/TaskForm.jsx";
 import Toast from "./components/Toast.jsx";
 import TopBar from "./components/TopBar.jsx";
+import WeeklyNotes from "./components/WeeklyNotes.jsx";
 import { GATED_TABS } from "./constants.js";
+import { dayKey } from "./utils/date.js";
 import { clearPendingInvite, readPendingInvite } from "./utils/invite.js";
 
 const SEARCH_PARAMS = new URLSearchParams(window.location.search);
@@ -92,6 +94,11 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
+  // Change fingerprint of the data on screen (週記 reloads its week when it moves) and the
+  // number of meetup invitations waiting for my answer (dot on 週記).
+  const [dataVersion, setDataVersion] = useState("");
+  const [plannerPending, setPlannerPending] = useState(0);
+  const [shopFrom, setShopFrom] = useState("home");
   const loadSeq = useRef(0);
   const versionRef = useRef("");
   const mutating = useRef(0);
@@ -140,6 +147,8 @@ export default function App() {
     setError("");
     setLoaded(false);
     setActiveTab("home");
+    setDataVersion("");
+    setPlannerPending(0);
   }, []);
 
   const logout = useCallback(() => {
@@ -167,7 +176,8 @@ export default function App() {
 
     let data;
     try {
-      data = await request(`/bootstrap?user_id=${userId}`);
+      // The phone's date decides which meetup invitations still count for the 週記 badge.
+      data = await request(`/bootstrap?user_id=${userId}&today=${dayKey(new Date())}`);
     } catch (err) {
       if (stale()) return;
       if (err.code === "user_not_found") {
@@ -185,11 +195,13 @@ export default function App() {
     if (stale() || mutating.current > 0) return;
 
     versionRef.current = data.version;
+    setDataVersion(data.version || "");
     setMe(data.user);
     setCouple(data.couple);
     setTasks(data.tasks || []);
     setStats(data.stats);
     setCompletedSummary(data.completed_summary || EMPTY_SUMMARY);
+    setPlannerPending(Number(data.planner_pending) || 0);
     if (!data.couple) {
       setManualRequired(false);
       setActiveTab((tab) => (GATED_TABS.has(tab) ? "partner" : tab));
@@ -273,6 +285,11 @@ export default function App() {
 
   function openTaskForm(date) {
     setTaskFormDate(date instanceof Date ? date : new Date());
+  }
+
+  function openShop() {
+    setShopFrom(activeTab === "shop" ? shopFrom : activeTab);
+    changeTab("shop");
   }
 
   function postJson(path, body) {
@@ -421,6 +438,18 @@ export default function App() {
           changeTab("tasks");
         }}
         onSeeAll={() => changeTab("tasks")}
+        onOpenShop={openShop}
+      />
+    );
+  } else if (activeTab === "planner" && couple) {
+    page = (
+      <WeeklyNotes
+        activeUser={activeUser}
+        members={members}
+        version={dataVersion}
+        showToast={showToast}
+        onChanged={refresh}
+        onGoPartner={() => changeTab("partner")}
       />
     );
   } else if (activeTab === "tasks") {
@@ -459,7 +488,16 @@ export default function App() {
       />
     );
   } else if (activeTab === "shop" && couple) {
-    page = <ShopPage couple={couple} activeUser={activeUser} onChanged={refresh} showToast={showToast} />;
+    page = (
+      <ShopPage
+        couple={couple}
+        activeUser={activeUser}
+        onChanged={refresh}
+        showToast={showToast}
+        backLabel={shopFrom === "profile" ? "回到我的" : "回到星域"}
+        onBack={() => changeTab(shopFrom === "profile" ? "profile" : "home")}
+      />
+    );
   } else if (activeTab === "profile") {
     page = (
       <ProfilePage
@@ -476,10 +514,13 @@ export default function App() {
           setActiveUser(userId);
         }}
         onGoPartner={() => changeTab("partner")}
+        onOpenShop={couple ? openShop : null}
         onLogout={logout}
       />
     );
   }
+
+  const navBadges = { planner: plannerPending };
 
   return (
     <div className="app-frame">
@@ -491,6 +532,7 @@ export default function App() {
         couple={couple}
         lockedTabs={lockedTabs}
         onLogout={logout}
+        badges={navBadges}
       />
       <div className="app-column">
         <TopBar members={couple ? members : []} onTabChange={changeTab} />
@@ -510,7 +552,7 @@ export default function App() {
           {page}
         </main>
       </div>
-      <BottomNav activeTab={activeTab} onTabChange={changeTab} lockedTabs={lockedTabs} />
+      <BottomNav activeTab={activeTab} onTabChange={changeTab} lockedTabs={lockedTabs} badges={navBadges} />
 
       {taskFormDate && couple && (
         <Modal kicker="泡泡" title="新增泡泡" onClose={() => setTaskFormDate(null)}>

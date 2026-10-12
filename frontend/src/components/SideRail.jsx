@@ -4,7 +4,7 @@ import { daysSince } from "../utils/date.js";
 import { AvatarPair } from "./Avatar.jsx";
 
 // Desktop navigation (≥1024px). Phones and tablets use TopBar + BottomNav.
-export default function SideRail({ activeTab, onTabChange, members, couple, lockedTabs, onLogout }) {
+export default function SideRail({ activeTab, onTabChange, members, couple, lockedTabs, onLogout, badges = {} }) {
   return (
     <aside className="side-rail" aria-label="側邊導覽">
       <div className="brand">
@@ -26,6 +26,12 @@ export default function SideRail({ activeTab, onTabChange, members, couple, lock
           >
             <Icon size={19} strokeWidth={2.1} />
             <span>{label}</span>
+            {badges[key] > 0 && !lockedTabs.has(key) && (
+              <span className="rail-badge">
+                {badges[key]}
+                <span className="sr-only"> 個邀請等你回覆</span>
+              </span>
+            )}
             {lockedTabs.has(key) && <Lock size={14} className="rail-lock" aria-label="尚未開放" />}
           </button>
         ))}

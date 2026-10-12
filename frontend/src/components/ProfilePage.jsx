@@ -1,4 +1,4 @@
-import { HeartHandshake, LogOut, Mail, Volume2 } from "lucide-react";
+import { ChevronRight, Gift, HeartHandshake, LogOut, Mail, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
 import { daysSince } from "../utils/date.js";
@@ -16,6 +16,7 @@ export default function ProfilePage({
   reviewMode,
   onSwitchUser,
   onGoPartner,
+  onOpenShop,
   onLogout,
 }) {
   const [allUsers, setAllUsers] = useState([]);
@@ -98,6 +99,17 @@ export default function ProfilePage({
             <span>可用星塵</span>
           </div>
         </section>
+
+        {onOpenShop && (
+          <button type="button" className="card shop-link" onClick={onOpenShop}>
+            <span className="shop-icon" aria-hidden="true"><Gift size={20} /></span>
+            <span>
+              <strong>星塵商城</strong>
+              <small>用一起完成泡泡累積的星塵，兌換小獎勵。</small>
+            </span>
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <section className="card settings-card" aria-labelledby="settings-title">

@@ -119,3 +119,71 @@ export function daysSince(value) {
   const start = parseServerDate(value) || new Date();
   return Math.max(1, Math.floor((startOfDay(new Date()) - startOfDay(start)) / 86400000) + 1);
 }
+
+// --- Calendar days ("YYYY-MM-DD") for the weekly notes ----------------------------------
+// A day key names a date on the wall calendar, not an instant: 10/12 is 10/12 in every
+// time zone. new Date("2026-10-12") would mean UTC midnight, which is still 10/11 in the
+// Americas, so keys are always read with parseDayKey.
+
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export const dayKey = toDateInputValue;
+
+export function parseDayKey(key) {
+  const match = DAY_KEY.exec(String(key || ""));
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return dayKey(date) === key ? date : null;
+}
+
+export function addDaysToKey(key, days) {
+  const date = parseDayKey(key);
+  return date ? dayKey(addDays(date, days)) : key;
+}
+
+export function daysBetweenKeys(fromKey, toKey) {
+  const from = parseDayKey(fromKey);
+  const to = parseDayKey(toKey);
+  if (!from || !to) return 0;
+  // Calendar arithmetic in UTC, so a daylight-saving change cannot make a day 23 hours long.
+  return Math.round(
+    (Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate()))
+      / 86400000
+  );
+}
+
+export function monthDay(key) {
+  const date = parseDayKey(key);
+  return date ? `${date.getMonth() + 1}/${date.getDate()}` : "";
+}
+
+export function monthDayWeekday(key) {
+  const date = parseDayKey(key);
+  return date ? `${date.getMonth() + 1}/${date.getDate()}（${WEEKDAYS[date.getDay()]}）` : "";
+}
+
+// "10/12" for one day, "10/12–10/15" for a range (year added when it is not this year).
+export function dayRangeLabel(startKey, endKey, todayKey = dayKey(new Date())) {
+  const start = parseDayKey(startKey);
+  const end = parseDayKey(endKey) || start;
+  if (!start) return "";
+  const thisYear = Number(String(todayKey).slice(0, 4));
+  const label = (date, withYear) => `${withYear ? `${date.getFullYear()}/` : ""}${date.getMonth() + 1}/${date.getDate()}`;
+  const showYear = start.getFullYear() !== thisYear || end.getFullYear() !== thisYear;
+  if (startKey === endKey || !endKey) return label(start, showYear);
+  return `${label(start, showYear)}–${label(end, showYear && end.getFullYear() !== start.getFullYear())}`;
+}
+
+// Page heading for a week: "10 月 11 日 – 17 日", "10 月 25 日 – 11 月 1 日",
+// "2026 年 12 月 27 日 – 2027 年 1 月 2 日".
+export function weekHeading(startKey, endKey, todayKey = dayKey(new Date())) {
+  const start = parseDayKey(startKey);
+  const end = parseDayKey(endKey);
+  if (!start || !end) return "";
+  const thisYear = Number(String(todayKey).slice(0, 4));
+  const crossYear = start.getFullYear() !== end.getFullYear();
+  const startYear = crossYear || start.getFullYear() !== thisYear ? `${start.getFullYear()} 年 ` : "";
+  const endYear = crossYear ? `${end.getFullYear()} 年 ` : "";
+  const endMonth = crossYear || end.getMonth() !== start.getMonth() ? `${end.getMonth() + 1} 月 ` : "";
+  return `${startYear}${start.getMonth() + 1} 月 ${start.getDate()} 日 – ${endYear}${endMonth}${end.getDate()} 日`;
+}

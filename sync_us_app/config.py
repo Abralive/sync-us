@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-APP_VERSION = "2026.10.09"
+APP_VERSION = "2026.10.12"
 
 
 def _load_env_file(path: Path) -> None:

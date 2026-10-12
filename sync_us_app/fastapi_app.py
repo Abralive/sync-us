@@ -1,11 +1,16 @@
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import services
+from . import planner, services
 from .config import INDEX_PATH
 from .database import init_db
 from .schemas import TaskCreate, TaskUpdate, UserCreate
+
+
+# Planner actions also work with user_id in the query string and no body, like the
+# standard-library server.
+OPTIONAL_BODY = Body(default_factory=dict)
 
 
 def is_local_request(request: Request) -> bool:
@@ -37,8 +42,8 @@ def create_app() -> FastAPI:
         return services.health()
 
     @app.get("/api/v1/bootstrap")
-    def bootstrap(user_id: int):
-        return call_service(lambda: services.bootstrap(user_id))
+    def bootstrap(user_id: int, today: str | None = None):
+        return call_service(lambda: services.bootstrap(user_id, today))
 
     @app.get("/api/v1/version")
     def data_version(user_id: int):
@@ -176,7 +181,66 @@ def create_app() -> FastAPI:
     def get_stats(couple_id: int = 1, user_id: int | None = None):
         return services.get_stats(couple_id, user_id=user_id)
 
+    # --- 雙人週記 (same behaviour as the standard-library server) -----------------------
+
+    @app.get("/api/v1/planner/week")
+    def planner_week(user_id: int, start: str | None = None):
+        return call_service(lambda: planner.get_week(user_id, start))
+
+    @app.post("/api/v1/planner/items", status_code=201)
+    def planner_create_item(payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.create_item(acting_user(payload, user_id), payload))
+
+    @app.put("/api/v1/planner/items/{item_id}")
+    def planner_update_item(item_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.update_item(item_id, acting_user(payload, user_id), payload))
+
+    @app.delete("/api/v1/planner/items/{item_id}")
+    def planner_delete_item(item_id: int, user_id: int | None = None):
+        return call_service(lambda: planner.delete_item(item_id, user_id))
+
+    @app.post("/api/v1/planner/items/{item_id}/restore")
+    def planner_restore_item(item_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.restore_item(item_id, acting_user(payload, user_id)))
+
+    @app.put("/api/v1/planner/availability/{day}")
+    def planner_availability(day: str, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.set_availability(acting_user(payload, user_id), day, payload.get("status")))
+
+    @app.post("/api/v1/planner/invitations", status_code=201)
+    def planner_invite(payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.create_invitation(acting_user(payload, user_id), payload))
+
+    @app.post("/api/v1/planner/invitations/{invitation_id}/accept")
+    def planner_accept(invitation_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.accept_invitation(invitation_id, acting_user(payload, user_id)))
+
+    @app.post("/api/v1/planner/invitations/{invitation_id}/decline")
+    def planner_decline(invitation_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.decline_invitation(invitation_id, acting_user(payload, user_id)))
+
+    @app.post("/api/v1/planner/invitations/{invitation_id}/withdraw")
+    def planner_withdraw(invitation_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.withdraw_invitation(invitation_id, acting_user(payload, user_id)))
+
+    @app.post("/api/v1/planner/shared-items/{item_id}/cancel")
+    def planner_cancel_shared(item_id: int, payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.cancel_shared_item(item_id, acting_user(payload, user_id)))
+
+    @app.post("/api/v1/planner/calendar/import-preview")
+    def planner_import_preview(payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.preview_import(acting_user(payload, user_id), payload))
+
+    @app.post("/api/v1/planner/calendar/import-confirm")
+    def planner_import_confirm(payload: dict = OPTIONAL_BODY, user_id: int | None = None):
+        return call_service(lambda: planner.confirm_import(acting_user(payload, user_id), payload))
+
     return app
+
+
+def acting_user(payload: dict, query_user_id: int | None):
+    value = payload.get("user_id")
+    return value if value not in (None, "") else query_user_id
 
 
 def model_to_dict(model, exclude_unset: bool = False) -> dict:

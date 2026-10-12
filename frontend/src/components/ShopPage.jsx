@@ -1,9 +1,9 @@
-import { Gift, Sparkles, Ticket } from "lucide-react";
+import { ChevronLeft, Gift, Sparkles, Ticket } from "lucide-react";
 import { useEffect, useState } from "react";
 import { request } from "../api/client.js";
 import { formatDateTime } from "../utils/date.js";
 
-export default function ShopPage({ couple, activeUser, onChanged, showToast }) {
+export default function ShopPage({ couple, activeUser, onChanged, showToast, onBack, backLabel = "返回" }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [confirmKey, setConfirmKey] = useState("");
@@ -45,6 +45,12 @@ export default function ShopPage({ couple, activeUser, onChanged, showToast }) {
 
   return (
     <div className="shop-page">
+      {onBack && (
+        <button type="button" className="link-btn page-back" onClick={onBack}>
+          <ChevronLeft size={16} aria-hidden="true" />
+          {backLabel}
+        </button>
+      )}
       <header className="page-head">
         <div className="page-title">
           <span className="kicker">商城</span>

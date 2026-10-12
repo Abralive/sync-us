@@ -236,8 +236,123 @@ def init_db() -> None:
                 ON partner_manual_entries(couple_id, updated_at);
             """
         )
+        ensure_planner_tables(conn)
         if os.environ.get("SYNC_US_SEED", "0") == "1":
             seed_data(conn)
+
+
+def ensure_planner_tables(conn: sqlite3.Connection) -> None:
+    """雙人週記: day notes for each partner, day availability, and meetup invitations.
+
+    Purely additive (new tables only), so existing data is untouched. Dates are calendar
+    days stored as "YYYY-MM-DD" with inclusive ranges, never timestamps, so 10/12 stays
+    10/12 in every time zone.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS meetup_invitations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            couple_id INTEGER NOT NULL,
+            from_user_id INTEGER NOT NULL,
+            to_user_id INTEGER NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            shared_item_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            responded_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(couple_id) REFERENCES couples(id),
+            FOREIGN KEY(from_user_id) REFERENCES users(id),
+            FOREIGN KEY(to_user_id) REFERENCES users(id),
+            FOREIGN KEY(shared_item_id) REFERENCES planner_items(id),
+            CHECK (from_user_id <> to_user_id),
+            CHECK (start_date <= end_date),
+            CHECK (status IN ('pending', 'accepted', 'declined', 'withdrawn', 'cancelled'))
+        );
+
+        -- One row per note. A shared row (owner_user_id NULL) only comes from an accepted
+        -- invitation and is drawn once across both columns; it never copies personal rows.
+        CREATE TABLE IF NOT EXISTS planner_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            couple_id INTEGER NOT NULL,
+            owner_user_id INTEGER,
+            scope TEXT NOT NULL DEFAULT 'personal',
+            kind TEXT NOT NULL DEFAULT 'event',
+            title TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '',
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            task_done INTEGER,
+            source TEXT NOT NULL DEFAULT 'manual',
+            external_source_id TEXT,
+            visibility TEXT NOT NULL DEFAULT 'full',
+            status TEXT NOT NULL DEFAULT 'active',
+            invitation_id INTEGER,
+            created_by_id INTEGER NOT NULL,
+            cancelled_by_id INTEGER,
+            cancelled_at TEXT,
+            deleted_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(couple_id) REFERENCES couples(id),
+            FOREIGN KEY(owner_user_id) REFERENCES users(id),
+            FOREIGN KEY(created_by_id) REFERENCES users(id),
+            FOREIGN KEY(cancelled_by_id) REFERENCES users(id),
+            FOREIGN KEY(invitation_id) REFERENCES meetup_invitations(id),
+            CHECK (start_date <= end_date),
+            CHECK (scope IN ('personal', 'shared')),
+            CHECK ((scope = 'personal') = (owner_user_id IS NOT NULL)),
+            CHECK (status IN ('active', 'cancelled'))
+        );
+
+        -- No row means "unknown": an empty day is never treated as free.
+        CREATE TABLE IF NOT EXISTS planner_day_availability (
+            couple_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            status TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (couple_id, user_id, date),
+            FOREIGN KEY(couple_id) REFERENCES couples(id),
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            CHECK (status IN ('available', 'unavailable'))
+        );
+
+        -- The week view asks for start_date <= week_end AND end_date >= week_start.
+        CREATE INDEX IF NOT EXISTS idx_planner_items_week
+            ON planner_items(couple_id, start_date, end_date);
+
+        CREATE INDEX IF NOT EXISTS idx_planner_items_updated
+            ON planner_items(couple_id, updated_at);
+
+        -- Accepting the same invitation twice can never create a second shared row.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_items_invitation
+            ON planner_items(invitation_id) WHERE invitation_id IS NOT NULL;
+
+        -- Importing the same calendar event again is skipped.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_planner_items_external
+            ON planner_items(couple_id, owner_user_id, source, external_source_id)
+            WHERE external_source_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_planner_availability_date
+            ON planner_day_availability(couple_id, date);
+
+        CREATE INDEX IF NOT EXISTS idx_planner_availability_updated
+            ON planner_day_availability(couple_id, updated_at);
+
+        -- At most one waiting invitation per couple and date range (double taps, both
+        -- partners inviting at once).
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_meetup_one_pending
+            ON meetup_invitations(couple_id, start_date, end_date) WHERE status = 'pending';
+
+        CREATE INDEX IF NOT EXISTS idx_meetup_couple_status
+            ON meetup_invitations(couple_id, status, start_date);
+
+        CREATE INDEX IF NOT EXISTS idx_meetup_couple_updated
+            ON meetup_invitations(couple_id, updated_at);
+        """
+    )
 
 
 def ensure_couple_columns(conn: sqlite3.Connection) -> None:

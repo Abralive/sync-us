@@ -1433,8 +1433,9 @@ def _active_couple_id(conn: sqlite3.Connection, user_id: int) -> int | None:
 def data_version(user_id: int) -> str:
     """A short fingerprint of everything this user's screens show.
 
-    It changes whenever a bubble, handbook entry, footprint, redemption or invite changes,
-    so clients can poll it every few seconds and only reload when something happened.
+    It changes whenever a bubble, handbook entry, footprint, redemption, invite or weekly
+    note (notes, day status, meetup invitations) changes, so clients can poll it every few
+    seconds and only reload when something happened.
     """
     user_id = int(user_id)
     with connect() as conn:
@@ -1455,7 +1456,14 @@ def data_version(user_id: int) -> str:
                 (couple_id,),
             ).fetchone()
             parts.append(f"couple:{couple_id}:{names['a_name']}:{names['b_name']}")
-            for table in ("tasks", "partner_manual_entries", "shared_footprints"):
+            for table in (
+                "tasks",
+                "partner_manual_entries",
+                "shared_footprints",
+                "planner_items",
+                "planner_day_availability",
+                "meetup_invitations",
+            ):
                 row = conn.execute(
                     f"SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS m FROM {table} WHERE couple_id = ?",
                     (couple_id,),
@@ -1495,8 +1503,12 @@ def completed_summary(couple_id: int, user_id: int | None = None) -> dict:
     return {"total": sum(row["count"] for row in rows), "by_user": by_user}
 
 
-def bootstrap(user_id: int) -> dict:
-    """Everything the app needs on open, in one request instead of four round trips."""
+def bootstrap(user_id: int, today=None) -> dict:
+    """Everything the app needs on open, in one request instead of four round trips.
+
+    `today` is the phone's own date (YYYY-MM-DD); it only decides which meetup invitations
+    still count for the badge on 週記.
+    """
     user_id = int(user_id)
     # Fingerprint first: if something changes while the rest is read, the next poll
     # sees a newer fingerprint and reloads, instead of missing the change.
@@ -1510,11 +1522,14 @@ def bootstrap(user_id: int) -> dict:
         "stats": None,
         "completed_summary": {"total": 0, "by_user": {}},
         "manual_count": 0,
+        "planner_pending": 0,
     }
     with connect() as conn:
         couple_id = _active_couple_id(conn, user_id)
     if not couple_id:
         return result
+    from . import planner  # late import: planner builds on this module
+
     couple = get_couple(couple_id)
     partner_id = couple["partner_b_id"] if couple["partner_a_id"] == user_id else couple["partner_a_id"]
     with connect() as conn:
@@ -1522,6 +1537,7 @@ def bootstrap(user_id: int) -> dict:
             "SELECT COUNT(*) AS n FROM partner_manual_entries WHERE couple_id = ? AND subject_user_id = ?",
             (couple_id, partner_id),
         ).fetchone()["n"]
+        planner_pending = planner.pending_count(conn, couple_id, user_id, today)
     result.update(
         {
             "couple": couple,
@@ -1529,6 +1545,7 @@ def bootstrap(user_id: int) -> dict:
             "stats": get_stats(couple_id, user_id=user_id),
             "completed_summary": completed_summary(couple_id, user_id),
             "manual_count": manual_count,
+            "planner_pending": planner_pending,
         }
     )
     return result

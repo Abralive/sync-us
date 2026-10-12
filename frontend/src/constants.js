@@ -1,15 +1,16 @@
-import { CalendarCheck, Gift, HeartHandshake, Home, User } from "lucide-react";
+import { CalendarCheck, HeartHandshake, Home, NotebookPen, User } from "lucide-react";
 
+// 商城 is not in the bar: it opens from the 星塵瓶 card (星域) and from 我的.
 export const NAV_ITEMS = [
   { key: "home", label: "星域", icon: Home },
-  { key: "partner", label: "連結", icon: HeartHandshake },
+  { key: "planner", label: "週記", icon: NotebookPen },
   { key: "tasks", label: "泡泡", icon: CalendarCheck },
-  { key: "shop", label: "商城", icon: Gift },
+  { key: "partner", label: "連結", icon: HeartHandshake },
   { key: "profile", label: "我的", icon: User },
 ];
 
 // Pages that need an active couple and at least one handbook entry.
-export const GATED_TABS = new Set(["home", "tasks", "shop"]);
+export const GATED_TABS = new Set(["home", "planner", "tasks", "shop"]);
 
 // Mirrors the reward catalogue on the server (used for the stardust jar preview).
 export const REWARD_PREVIEW = [
