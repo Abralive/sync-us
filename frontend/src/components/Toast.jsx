@@ -11,7 +11,7 @@ export default function Toast({ toast, onDone }) {
 
   useEffect(() => {
     if (!toast || paused) return undefined;
-    const delay = toast.action ? 7000 : toast.tone === "error" ? 4800 : 3200;
+    const delay = toast.duration || (toast.action ? 7000 : toast.tone === "error" ? 4800 : 3200);
     const timer = window.setTimeout(onDone, delay);
     return () => window.clearTimeout(timer);
   }, [toast, onDone, paused]);

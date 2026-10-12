@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  Ellipsis,
   EyeOff,
   FileUp,
   Heart,
@@ -15,13 +16,14 @@ import {
   SquareCheck,
   StickyNote,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { request } from "../api/client.js";
 import {
   WEEKDAYS,
   addDaysToKey,
   dayKey,
   dayRangeLabel,
+  daysBetweenKeys,
   monthDay,
   monthDayWeekday,
   parseDayKey,
@@ -30,14 +32,17 @@ import {
 } from "../utils/date.js";
 import Avatar from "./Avatar.jsx";
 import CalendarImport from "./CalendarImport.jsx";
-import { MeetupSheet, NoteSheet, NoteView } from "./NoteSheets.jsx";
+import { InvitationSheet, MeetupSheet, NoteSheet, NoteView } from "./NoteSheets.jsx";
 
 const STATUS_TEXT = { available: "有空", unavailable: "不方便" };
+// Plain confirmations leave quickly; anything with 「復原」 keeps the usual time.
+const BRIEF = { duration: 2000 };
 const RESPONSE_TOASTS = {
-  accept: (invitation) => `約好了！${monthDayWeekday(invitation.start_date)} 一起見面 ♡`,
-  decline: () => "已回覆不方便，這天標成了「不方便」",
+  accept: (invitation) => `約好了！${monthDayWeekday(invitation.start_date)} 一起見面`,
+  decline: () => "已回覆不方便",
   withdraw: () => "已撤回邀請",
 };
+const TIP_KEY = "sync-us-planner-tip-v1";
 
 function thisWeekKey() {
   return dayKey(startOfWeek(new Date()));
@@ -62,10 +67,17 @@ function send(path, method, body) {
   return request(path, { method, body: JSON.stringify(body) });
 }
 
+function readTipSeen(key) {
+  try {
+    return localStorage.getItem(key) === "seen";
+  } catch {
+    return true; // storage blocked: do not keep showing the tip
+  }
+}
+
 function screenReaderNote(item, mine) {
   const parts = [];
   if (item.kind === "task") parts.push(item.task_done ? "待辦，已完成" : "待辦");
-  if (item.kind === "note") parts.push("筆記");
   if (item.redacted) parts.push("只分享有行程");
   if (item.source === "ics") parts.push("從日曆匯入");
   if (mine && item.visibility === "busy_only") parts.push("對方只看到有行程");
@@ -89,10 +101,34 @@ function DayStatus({ status }) {
   );
 }
 
-function NoteLine({ item, mine, todayKey, onOpen, onToggle }) {
-  const done = item.kind === "task" && item.task_done;
+// One line per item. A multi-day item is written out on its first day in this week; the
+// following days only get a thin band, so the same thing is not read four times.
+function NoteLine({ item, day, firstShown, mine, todayKey, onOpen, onToggle }) {
   const multiDay = item.start_date !== item.end_date;
-  const hasMeta = item.source === "ics" || (mine && item.visibility === "busy_only");
+  if (multiDay && day !== firstShown) {
+    const nth = daysBetweenKeys(item.start_date, day) + 1;
+    const total = daysBetweenKeys(item.start_date, item.end_date) + 1;
+    return (
+      <li className="pd-note is-continued">
+        <button type="button" className="pd-cont" onClick={() => onOpen(item)}>
+          <span aria-hidden="true">↳ </span>
+          {item.title}
+          <span className="sr-only">，第 {nth} 天，共 {total} 天</span>
+        </button>
+      </li>
+    );
+  }
+  const done = item.kind === "task" && item.task_done;
+  // Small marks ride at the end of the title instead of taking a line of their own.
+  // On the partner's 「有行程」 the lock already says enough.
+  const fromCalendar = item.source === "ics" && !item.redacted;
+  const hiddenFromPartner = mine && item.visibility === "busy_only";
+  const marks = (fromCalendar || hiddenFromPartner) && (
+    <span className="pd-marks" aria-hidden="true">
+      {fromCalendar && <CalendarDays size={12} />}
+      {hiddenFromPartner && <EyeOff size={12} />}
+    </span>
+  );
   const box = done ? <SquareCheck size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />;
   return (
     <li className={`pd-note kind-${item.kind}${done ? " is-done" : ""}${item.redacted ? " is-redacted" : ""}`}>
@@ -116,15 +152,14 @@ function NoteLine({ item, mine, todayKey, onOpen, onToggle }) {
       <button type="button" className="pd-note-btn" onClick={() => onOpen(item)}>
         {/* Long text is cut to two lines here; the full text is one tap away. */}
         <span className="pd-text">
-          {item.kind === "note" && <StickyNote size={13} className="pd-icon" aria-hidden="true" />}
           {item.redacted && <Lock size={12} className="pd-icon" aria-hidden="true" />}
           <span className="pd-title">{item.title}</span>
+          {!multiDay && marks}
         </span>
-        {(multiDay || hasMeta) && (
-          <span className="pd-sub" aria-hidden={multiDay ? undefined : "true"}>
-            {multiDay && <span className="pd-range">{dayRangeLabel(item.start_date, item.end_date, todayKey)}</span>}
-            {item.source === "ics" && <CalendarDays size={12} aria-hidden="true" />}
-            {mine && item.visibility === "busy_only" && <EyeOff size={12} aria-hidden="true" />}
+        {multiDay && (
+          <span className="pd-sub">
+            <span className="pd-range">{dayRangeLabel(item.start_date, item.end_date, todayKey)}</span>
+            {marks}
           </span>
         )}
         <span className="sr-only">{screenReaderNote(item, mine)}</span>
@@ -133,41 +168,34 @@ function NoteLine({ item, mine, todayKey, onOpen, onToggle }) {
   );
 }
 
-function Cell({ day, items, status, mine, ownerName, todayKey, onAdd, onOpen, onToggle }) {
-  const empty = items.length === 0 && status === "unknown";
+// An empty cell stays empty: no plus sign, no dash, and never read as 「有空」.
+function Cell({ day, weekStart, items, status, showStatus, mine, ownerName, todayKey, onOpen, onToggle }) {
+  const statusShown = showStatus && status !== "unknown";
   return (
     <>
-      {status !== "unknown" && <DayStatus status={status} />}
+      {statusShown && <DayStatus status={status} />}
       {items.length > 0 && (
         <ul className="pd-notes">
           {items.map((item) => (
-            <NoteLine key={item.id} item={item} mine={mine} todayKey={todayKey} onOpen={onOpen} onToggle={onToggle} />
+            <NoteLine
+              key={item.id}
+              item={item}
+              day={day}
+              firstShown={item.start_date < weekStart ? weekStart : item.start_date}
+              mine={mine}
+              todayKey={todayKey}
+              onOpen={onOpen}
+              onToggle={onToggle}
+            />
           ))}
         </ul>
       )}
-      {mine ? (
-        <button
-          type="button"
-          className={`pd-add${empty ? " is-empty" : ""}`}
-          onClick={() => onAdd(day)}
-          aria-label={`新增到 ${monthDayWeekday(day)}（我）`}
-        >
-          <Plus size={14} aria-hidden="true" />
-          {empty && <span aria-hidden="true">寫點什麼</span>}
-        </button>
-      ) : (
-        empty && (
-          <span className="pd-empty">
-            <span aria-hidden="true">—</span>
-            <span className="sr-only">{ownerName} 這天還沒寫</span>
-          </span>
-        )
-      )}
+      {!statusShown && items.length === 0 && <span className="sr-only">{mine ? "我這天還沒寫" : `${ownerName} 這天還沒寫`}</span>}
     </>
   );
 }
 
-// What the slim row under a day offers about meeting up (nothing when a meetup is agreed).
+// What the row under a day says about meeting up (nothing once a meetup is agreed).
 function meetState({ day, todayKey, shared, invitation, myStatus, partnerStatus }) {
   if (shared.some((item) => item.kind === "meetup")) return null;
   if (invitation) {
@@ -178,9 +206,14 @@ function meetState({ day, todayKey, shared, invitation, myStatus, partnerStatus 
   return null;
 }
 
-function MeetRow({ state, day, partnerName, busy, onInvite, onRespond }) {
+function MeetRow({ state, day, partnerName, busy, onInvite, onRespond, onMore }) {
   const invitation = state.invitation;
   const working = (key) => busy === key;
+  const more = (
+    <button type="button" className="pd-more" onClick={() => onMore(invitation)} aria-label="見面邀請的其他選項">
+      <Ellipsis size={18} aria-hidden="true" />
+    </button>
+  );
   return (
     <tr className={`pd-meet-row is-${state.type}`}>
       <td colSpan={2}>
@@ -188,7 +221,7 @@ function MeetRow({ state, day, partnerName, busy, onInvite, onRespond }) {
           {state.type === "free" && (
             <>
               <span className="pd-meet-text">
-                <CircleCheck size={14} aria-hidden="true" />
+                <CircleCheck size={15} aria-hidden="true" />
                 兩個人都有空
               </span>
               <button type="button" className="btn btn-coral btn-sm" onClick={() => onInvite(day)} disabled={working(`invite:${day}`)}>
@@ -199,19 +232,11 @@ function MeetRow({ state, day, partnerName, busy, onInvite, onRespond }) {
           )}
           {state.type === "waiting" && (
             <>
-              <span className="tag tag-warm">
-                <Heart size={12} aria-hidden="true" />
-                待回覆
+              <span className="pd-meet-text">
+                <Heart size={14} aria-hidden="true" />
+                見面邀請・等待 {partnerName} 回覆
               </span>
-              <span className="pd-meet-text">已邀請 {partnerName}</span>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onRespond(invitation, "withdraw")}
-                disabled={working(`withdraw:${invitation.id}`)}
-              >
-                撤回
-              </button>
+              {more}
             </>
           )}
           {state.type === "incoming" && (
@@ -242,14 +267,8 @@ function MeetRow({ state, day, partnerName, busy, onInvite, onRespond }) {
           )}
           {state.type === "expired" && (
             <>
-              <span className="tag">邀請已過期</span>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onRespond(invitation, invitation.incoming ? "decline" : "withdraw")}
-              >
-                移除
-              </button>
+              <span className="pd-meet-text">見面邀請已過期</span>
+              {more}
             </>
           )}
         </div>
@@ -258,26 +277,40 @@ function MeetRow({ state, day, partnerName, busy, onInvite, onRespond }) {
   );
 }
 
-function DayGroup({ day, todayKey, me, partner, items, statusOf, invitation, busy, handlers }) {
+function DayGroup({ day, weekStart, todayKey, me, partner, items, statusOf, invitation, busy, handlers }) {
   const date = parseDayKey(day);
-  const mine = items.filter((item) => item.scope === "personal" && item.owner_user_id === me.id && covers(item, day));
-  const theirs = items.filter((item) => item.scope === "personal" && item.owner_user_id === partner.id && covers(item, day));
+  // Memos live in their own area under the week; the grid keeps what happens on the day.
+  const onDay = (owner) => (item) =>
+    item.scope === "personal" && item.owner_user_id === owner && item.kind !== "note" && covers(item, day);
+  const mine = items.filter(onDay(me.id));
+  const theirs = items.filter(onDay(partner.id));
   const shared = items.filter((item) => item.scope === "shared" && covers(item, day));
   const myStatus = statusOf(me.id, day);
   const partnerStatus = statusOf(partner.id, day);
   const meet = meetState({ day, todayKey, shared, invitation, myStatus, partnerStatus });
+  // When the row below already says it (both free, invited, agreed), skip the two 「有空」 chips.
+  const freeSaidBelow = Boolean(meet) || shared.some((item) => item.kind === "meetup");
+  const showStatusFor = (status) => !(status === "available" && freeSaidBelow);
   const rows = 1 + shared.length + (meet ? 1 : 0);
   const isToday = day === todayKey;
+  const label = `${date.getMonth() + 1}/${date.getDate()}`;
+  const weekday = WEEKDAYS[date.getDay()];
 
   return (
     <tbody className={`planner-day${isToday ? " is-today" : ""}${day < todayKey ? " is-past" : ""}`} data-day={day}>
       <tr className="pd-main-row">
         <th scope="rowgroup" rowSpan={rows} className="pd-date">
-          <span className="pd-md">
-            {date.getMonth() + 1}/{date.getDate()}
-          </span>
-          <span className="pd-wd">週{WEEKDAYS[date.getDay()]}</span>
-          {isToday && <span className="pd-today">今天</span>}
+          {/* The date itself adds to my column for that day (no plus sign in every cell). */}
+          <button
+            type="button"
+            className="pd-date-btn"
+            onClick={() => handlers.onAdd(day)}
+            aria-label={`${label}（${weekday}）${isToday ? "今天" : ""}，新增到我這天`}
+          >
+            <span className="pd-md">{label}</span>
+            <span className="pd-wd">週{weekday}</span>
+            {isToday && <span className="pd-today">今天</span>}
+          </button>
         </th>
         <td
           className={`pd-cell is-mine tone-${me.tone}`}
@@ -288,12 +321,13 @@ function DayGroup({ day, todayKey, me, partner, items, statusOf, invitation, bus
         >
           <Cell
             day={day}
+            weekStart={weekStart}
             items={mine}
             status={myStatus}
+            showStatus={showStatusFor(myStatus)}
             mine
             ownerName="我"
             todayKey={todayKey}
-            onAdd={handlers.onAdd}
             onOpen={handlers.onOpen}
             onToggle={handlers.onToggle}
           />
@@ -301,12 +335,13 @@ function DayGroup({ day, todayKey, me, partner, items, statusOf, invitation, bus
         <td className={`pd-cell is-theirs tone-${partner.tone}`}>
           <Cell
             day={day}
+            weekStart={weekStart}
             items={theirs}
             status={partnerStatus}
+            showStatus={showStatusFor(partnerStatus)}
             mine={false}
             ownerName={partner.username}
             todayKey={todayKey}
-            onAdd={handlers.onAdd}
             onOpen={handlers.onOpen}
             onToggle={handlers.onToggle}
           />
@@ -337,9 +372,37 @@ function DayGroup({ day, todayKey, me, partner, items, statusOf, invitation, bus
           busy={busy}
           onInvite={handlers.onInvite}
           onRespond={handlers.onRespond}
+          onMore={handlers.onMore}
         />
       )}
     </tbody>
+  );
+}
+
+// Memos (「其他」) are not tied to what happens on a day, so they sit in one place.
+function MemoColumn({ title, tone, memos, todayKey, onOpen }) {
+  return (
+    <div className={`memo-col tone-${tone}`}>
+      <h3>{title}</h3>
+      {memos.length ? (
+        <ul>
+          {memos.map((memo) => (
+            <li key={memo.id}>
+              <button type="button" className="memo-item" onClick={() => onOpen(memo)}>
+                <span className="memo-text">{memo.title}</span>
+                <span className="memo-day">
+                  {memo.start_date === memo.end_date
+                    ? `週${WEEKDAYS[parseDayKey(memo.start_date).getDay()]}`
+                    : dayRangeLabel(memo.start_date, memo.end_date, todayKey)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="memo-empty">還沒有</p>
+      )}
+    </div>
   );
 }
 
@@ -428,6 +491,19 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
   );
   const defaultDay = days.includes(todayKey) ? todayKey : days[0];
   const isThisWeek = weekStart === thisWeekKey();
+  const memos = items.filter((item) => item.scope === "personal" && item.kind === "note");
+  const memoTitleId = useId();
+  const tipKey = `${TIP_KEY}:${userId}`;
+  const [tipSeen, setTipSeen] = useState(() => readTipSeen(tipKey));
+
+  function closeTip() {
+    setTipSeen(true);
+    try {
+      localStorage.setItem(tipKey, "seen");
+    } catch {
+      // Storage blocked: the tip just shows again next time.
+    }
+  }
 
   function goWeek(key) {
     setWeekStart(key);
@@ -465,7 +541,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
       const saved = await send(`/planner/items/${item.id}`, "PUT", { user_id: userId, ...values });
       patch((week) => ({ ...week, items: withRecord(week.items, saved) }));
       setSheet(null);
-      showToast(`已更新「${saved.title}」`);
+      showToast(`已更新「${saved.title}」`, "info", null, BRIEF);
     } finally {
       endMutation();
     }
@@ -476,7 +552,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
     try {
       const restored = await send(`/planner/items/${item.id}/restore`, "POST", { user_id: userId });
       patch((week) => ({ ...week, items: withRecord(week.items, restored) }));
-      showToast(`「${restored.title}」回來了`);
+      showToast(`「${restored.title}」回來了`, "info", null, BRIEF);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -491,7 +567,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
     patch((week) => ({ ...week, items: week.items.filter((entry) => entry.id !== item.id) }));
     try {
       await request(`/planner/items/${item.id}?user_id=${userId}`, { method: "DELETE" });
-      if (undoCreate) showToast(`已拿掉「${item.title}」`);
+      if (undoCreate) showToast(`已拿掉「${item.title}」`, "info", null, BRIEF);
       else showToast(`已刪除「${item.title}」`, "info", { label: "復原", onClick: () => restoreNote(item) });
     } catch (err) {
       patch((week) => ({ ...week, items: withRecord(week.items, item) }));
@@ -539,7 +615,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
       const label = status === "unknown" ? `${monthDay(day)} 的狀態已清除` : `${monthDay(day)} 標記為「${STATUS_TEXT[status]}」`;
       if (closed.length) {
         const sentByMe = closed.some((invitation) => !invitation.incoming);
-        showToast(`${label}，${sentByMe ? "這天的見面邀請已撤回" : "這天的見面邀請也回覆了不方便"}`);
+        showToast(`${label}，${sentByMe ? "見面邀請已撤回" : "見面邀請已回覆不方便"}`);
       } else if (undoable) {
         showToast(label, "info", { label: "復原", onClick: () => setDayStatus(day, previous, { undoable: false }) });
       }
@@ -557,7 +633,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
     try {
       const result = await send("/planner/invitations", "POST", { user_id: userId, start_date: day });
       patch((week) => ({ ...week, invitations: withRecord(week.invitations, result.invitation) }));
-      showToast(`已邀請 ${partnerName} ${monthDayWeekday(day)} 見面，等回覆中`);
+      showToast("已送出見面邀請", "info", null, BRIEF);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -584,9 +660,12 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
           day = addDaysToKey(day, 1);
         }
       }
-      showToast(RESPONSE_TOASTS[action](invitation));
+      const expired = invitation.expired || invitation.end_date < todayKey;
+      showToast(expired ? "已移除過期的邀請" : RESPONSE_TOASTS[action](invitation), "info", null, BRIEF);
+      return true;
     } catch (err) {
       showToast(err.message, "error");
+      return false;
     } finally {
       setBusy("");
       endMutation();
@@ -599,7 +678,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
       await send(`/planner/shared-items/${item.id}/cancel`, "POST", { user_id: userId });
       patch((week) => ({ ...week, items: week.items.filter((entry) => entry.id !== item.id) }));
       setSheet(null);
-      showToast("已取消這次見面，兩個人的個人事項都還在");
+      showToast("已取消這次見面", "info", null, BRIEF);
     } catch (err) {
       showToast(err.message, "error");
       throw err;
@@ -625,6 +704,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
     onToggle: toggleTask,
     onInvite: invite,
     onRespond: respond,
+    onMore: (invitation) => setSheet({ type: "invitation", invitation }),
   };
   const heading = weekHeading(days[0], days[6], todayKey);
 
@@ -679,6 +759,17 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
       ) : (
         partner && (
           <>
+            {!tipSeen && (
+              <div className="planner-tip" role="note">
+                <p>
+                  點日期或自己的格子，就能記下那天的事，也能標「有空／不方便」。兩個人都有空的日子會亮起來，可以直接邀請見面。
+                </p>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={closeTip}>
+                  知道了
+                </button>
+              </div>
+            )}
+
             {elsewhere.length > 0 && (
               <section className="planner-inbox" aria-label="等你回覆的見面邀請">
                 <Heart size={16} aria-hidden="true" />
@@ -725,6 +816,7 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
                   <DayGroup
                     key={day}
                     day={day}
+                    weekStart={weekStart}
                     todayKey={todayKey}
                     me={me}
                     partner={partner}
@@ -738,9 +830,30 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
               </table>
             </div>
 
-            <p className="planner-legend">
-              點自己的格子就能寫，也能標「有空／不方便」。兩個人都有空時可以邀請見面；對方接受後，那天會多一列橫跨兩欄的「♡ 一起見面」，各自原本的事項都會留著。
-            </p>
+            {memos.length > 0 && (
+              <section className="card planner-memos" aria-labelledby={memoTitleId}>
+                <h2 id={memoTitleId} className="planner-memos-title">
+                  <StickyNote size={16} aria-hidden="true" />
+                  這週的備忘
+                </h2>
+                <div className="memo-columns">
+                  <MemoColumn
+                    title="我"
+                    tone={me.tone}
+                    memos={memos.filter((memo) => memo.owner_user_id === userId)}
+                    todayKey={todayKey}
+                    onOpen={openItem}
+                  />
+                  <MemoColumn
+                    title={partner.username}
+                    tone={partner.tone}
+                    memos={memos.filter((memo) => memo.owner_user_id === partner.id)}
+                    todayKey={todayKey}
+                    onOpen={openItem}
+                  />
+                </div>
+              </section>
+            )}
           </>
         )
       )}
@@ -773,6 +886,15 @@ export default function WeeklyNotes({ activeUser, members, version, showToast, o
         />
       )}
       {sheet?.type === "view" && <NoteView item={sheet.item} ownerName={partnerName} onClose={() => setSheet(null)} />}
+      {sheet?.type === "invitation" && (
+        <InvitationSheet
+          invitation={sheet.invitation}
+          expired={sheet.invitation.expired || sheet.invitation.end_date < todayKey}
+          partnerName={partnerName}
+          onRespond={respond}
+          onClose={() => setSheet(null)}
+        />
+      )}
       {sheet?.type === "meetup" && (
         <MeetupSheet
           item={sheet.item}

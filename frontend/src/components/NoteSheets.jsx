@@ -297,6 +297,43 @@ export function NoteView({ item, ownerName, onClose }) {
   );
 }
 
+/**
+ * The 「⋯」 behind a one-line invitation: withdraw one I sent, or clear one whose date
+ * has passed. (A fresh invitation from my partner shows 接受 / 不方便 right on the line.)
+ */
+export function InvitationSheet({ invitation, expired, partnerName, onRespond, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const action = invitation.incoming ? "decline" : "withdraw";
+  const label = expired ? "移除這個邀請" : invitation.incoming ? "回覆不方便" : "撤回邀請";
+  let lead = `已邀請 ${partnerName} 這天見面，正在等對方回覆。`;
+  if (invitation.incoming) lead = `${partnerName} 邀你這天見面。`;
+  if (expired) lead = "這個邀請的日期已經過了。";
+
+  async function run() {
+    setBusy(true);
+    const done = await onRespond(invitation, action);
+    if (done) onClose();
+    else setBusy(false);
+  }
+
+  const footer = (
+    <div className="btn-row btn-row-end">
+      <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
+        關閉
+      </button>
+      <button type="button" className="btn btn-ghost btn-danger-text" onClick={run} disabled={busy}>
+        {busy ? "處理中…" : label}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal kicker="見面邀請" title={monthDayWeekday(invitation.start_date)} onClose={onClose} footer={footer} size="sm">
+      <p className="modal-lead">{lead}</p>
+    </Modal>
+  );
+}
+
 /** An agreed meetup (the row across both columns). Either partner can call it off. */
 export function MeetupSheet({ item, members, activeUser, onCancelMeetup, onClose }) {
   const [confirming, setConfirming] = useState(false);

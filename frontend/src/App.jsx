@@ -107,8 +107,9 @@ export default function App() {
 
   const isAuthenticated = Boolean(activeUser);
   const refresh = useCallback(() => setRefreshTick((tick) => tick + 1), []);
-  const showToast = useCallback((message, tone = "info", action = null) => {
-    setToast({ message, tone, action, id: Date.now() + Math.random() });
+  // options.duration (ms) shortens a plain confirmation; messages with 「復原」 keep their time.
+  const showToast = useCallback((message, tone = "info", action = null, options = {}) => {
+    setToast({ message, tone, action, duration: options.duration || 0, id: Date.now() + Math.random() });
   }, []);
   const clearToast = useCallback(() => setToast(null), []);
 

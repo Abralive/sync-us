@@ -2709,11 +2709,26 @@ svg {
 }
 
 .pd-date {
-  padding: 10px 2px 10px 8px;
+  padding: 6px 2px 6px 4px;
   border-right: 1px solid var(--line);
   color: var(--ink);
   text-align: left;
   vertical-align: top;
+}
+
+/* The date is also the way to add to my column for that day. */
+.pd-date-btn {
+  display: grid;
+  justify-items: start;
+  width: 100%;
+  padding: 4px 4px 4px 4px;
+  border-radius: 10px;
+  color: inherit;
+  text-align: left;
+}
+
+.pd-date-btn:hover {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .pd-md {
@@ -2733,8 +2748,8 @@ svg {
 
 .pd-today {
   display: inline-block;
-  margin-top: 4px;
-  padding: 1px 6px;
+  margin-top: 3px;
+  padding: 0 6px;
   border-radius: 999px;
   background: var(--coral-strong);
   color: #fffaf0;
@@ -2751,23 +2766,27 @@ svg {
   color: var(--muted);
 }
 
+/* Rows are as tall as what is in them: an empty day is a short row, not a block. */
 .pd-cell {
-  height: 64px; /* acts as a minimum height for table cells */
   padding: 6px;
   vertical-align: top;
 }
 
 .pd-cell + .pd-cell {
-  border-left: 1px dashed var(--line-strong);
+  border-left: 1px solid var(--line);
 }
 
 /* The two people's soft colours (same as their avatars). */
 .pd-cell.tone-1 {
-  background: rgba(141, 187, 176, 0.11);
+  --note-bar: var(--teal);
+  --band: rgba(95, 158, 150, 0.18);
+  background: rgba(141, 187, 176, 0.09);
 }
 
 .pd-cell.tone-2 {
-  background: rgba(242, 185, 173, 0.13);
+  --note-bar: var(--coral);
+  --band: rgba(232, 116, 94, 0.14);
+  background: rgba(242, 185, 173, 0.11);
 }
 
 .pd-cell.is-mine {
@@ -2778,8 +2797,8 @@ svg {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  margin-bottom: 4px;
-  padding: 2px 8px;
+  margin: 1px 0 3px;
+  padding: 1px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
@@ -2798,7 +2817,7 @@ svg {
 
 .pd-notes {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .pd-note {
@@ -2808,22 +2827,29 @@ svg {
   min-width: 0;
 }
 
+/* No boxes: a schedule item is a line with a thin bar in its owner's colour. */
 .pd-note-btn {
   display: block;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.75);
+  padding: 3px 6px 3px 9px;
+  border-radius: 6px;
+  background: transparent;
   color: var(--ink);
   font-size: 13.5px;
   line-height: 1.35;
   text-align: left;
+  box-shadow: inset 3px 0 0 var(--note-bar, var(--teal));
 }
 
 .pd-note-btn:hover {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+/* A task carries its tick box instead of the bar. */
+.pd-note.kind-task .pd-note-btn {
+  padding-left: 2px;
+  box-shadow: none;
 }
 
 .pd-text {
@@ -2837,8 +2863,19 @@ svg {
 
 .pd-icon {
   margin-right: 3px;
-  color: var(--teal-deep);
   vertical-align: -2px;
+}
+
+.pd-marks {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 5px;
+  color: var(--muted);
+  vertical-align: -1px;
+}
+
+.pd-sub .pd-marks {
+  margin-left: 0;
 }
 
 .pd-sub {
@@ -2846,7 +2883,7 @@ svg {
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 5px;
-  margin-top: 2px;
+  margin-top: 1px;
   color: var(--muted);
   font-size: 11.5px;
   font-weight: 700;
@@ -2872,10 +2909,32 @@ svg {
   text-decoration-color: rgba(44, 99, 93, 0.75);
 }
 
+/* The partner chose to show only 「有行程」. */
 .pd-note.is-redacted .pd-note-btn {
-  border-style: dashed;
-  background: transparent;
   color: var(--ink-soft);
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+
+.pd-note.is-redacted .pd-text {
+  font-weight: 600;
+}
+
+/* Days after the first of a multi-day item: one thin band. */
+.pd-cont {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--band, rgba(95, 158, 150, 0.18));
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.75;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pd-check {
@@ -2883,7 +2942,7 @@ svg {
   flex: none;
   place-items: center;
   width: 28px;
-  height: 28px;
+  height: 26px;
   border-radius: 8px;
   color: var(--teal-deep);
 }
@@ -2896,41 +2955,9 @@ svg {
   color: var(--muted);
 }
 
-.pd-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 26px;
-  margin-top: 2px;
-  border-radius: 10px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.pd-add:hover {
-  background: rgba(255, 255, 255, 0.75);
-  color: var(--ink);
-}
-
-.pd-add.is-empty {
-  min-height: 50px;
-  margin-top: 0;
-  border: 1px dashed var(--line-strong);
-}
-
-.pd-empty {
-  display: block;
-  padding: 12px 4px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 /* The merged cell: one shared row spanning both people's columns. */
 .pd-shared-cell {
-  padding: 2px 6px 8px;
+  padding: 2px 6px 6px;
 }
 
 .pd-shared {
@@ -2939,7 +2966,7 @@ svg {
   align-items: center;
   gap: 4px 8px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 9px 14px;
   border: 1px solid rgba(226, 184, 92, 0.6);
   border-radius: 14px;
   background: linear-gradient(90deg, rgba(247, 223, 143, 0.6), rgba(244, 214, 178, 0.6));
@@ -2976,9 +3003,10 @@ svg {
   font-weight: 700;
 }
 
-/* Waiting invitation / both free: a slim dashed row, never the filled merged cell. */
+/* The row under a day about meeting up. 「兩個人都有空」 stands out; a waiting or
+   expired invitation is one quiet line. */
 .pd-meet-row > td {
-  padding: 0 6px 8px;
+  padding: 0 6px 6px;
 }
 
 .pd-meet {
@@ -2986,8 +3014,8 @@ svg {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
-  padding: 6px 10px;
-  border: 1px dashed var(--line-strong);
+  min-height: 32px;
+  padding: 0 4px 0 10px;
   border-radius: 12px;
   color: var(--ink-soft);
   font-size: 13.5px;
@@ -3006,23 +3034,138 @@ svg {
   margin-left: auto;
 }
 
+.pd-meet-row.is-free .pd-meet {
+  padding: 6px 6px 6px 12px;
+  background: rgba(95, 158, 150, 0.17);
+  color: #1f4f49;
+  font-weight: 800;
+}
+
 .pd-meet-row.is-free .btn {
   margin-left: auto;
 }
 
 .pd-meet-row.is-incoming .pd-meet {
-  border-style: solid;
-  border-color: rgba(232, 116, 94, 0.35);
+  padding: 6px 6px 6px 12px;
+  border: 1px solid rgba(232, 116, 94, 0.35);
   background: rgba(232, 116, 94, 0.07);
   color: #7a3426;
 }
 
-.planner-legend {
-  max-width: 62ch;
-  margin-top: 12px;
+.pd-more {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  margin-left: auto;
+  border-radius: 10px;
+  color: var(--ink-soft);
+}
+
+.pd-more:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+/* Shown once, the first time 週記 opens. */
+.planner-tip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid rgba(95, 158, 150, 0.3);
+  border-radius: 14px;
+  background: rgba(95, 158, 150, 0.1);
+  color: #1f4f49;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.planner-tip p {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* 這週的備忘: memos are not tied to a day, so they sit under the week. */
+.planner-memos {
+  margin-top: 14px;
+  padding: 14px 16px;
+}
+
+.planner-memos-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.memo-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.memo-col {
+  min-width: 0;
+}
+
+.memo-col h3 {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.memo-col.tone-1 h3 {
+  box-shadow: inset 0 -2px 0 var(--teal);
+}
+
+.memo-col.tone-2 h3 {
+  box-shadow: inset 0 -2px 0 var(--coral);
+}
+
+.memo-col ul {
+  display: grid;
+  gap: 2px;
+}
+
+.memo-item {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.memo-item:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.memo-text {
+  display: block;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.memo-day {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.memo-empty {
+  padding: 4px 6px;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.6;
 }
 
 .planner-unpaired {
@@ -3878,6 +4021,11 @@ body.has-modal .toast-region {
     padding-bottom: calc(var(--bottomnav-h) + var(--safe-bottom) + 104px);
   }
 
+  /* Pages with a floating + show messages above it, not on top of it. */
+  body:has(.fab):not(.has-modal) .toast-region {
+    bottom: calc(var(--bottomnav-h) + var(--safe-bottom) + 96px);
+  }
+
   .planner-head .planner-tools {
     width: 100%;
     justify-content: space-between;
@@ -3928,7 +4076,7 @@ body.has-modal .toast-region {
   }
 
   .pd-date {
-    padding-left: 5px;
+    padding-left: 2px;
   }
 
   .pd-md {
@@ -3941,7 +4089,7 @@ body.has-modal .toast-region {
   }
 
   .pd-note-btn {
-    padding: 4px 5px;
+    padding: 3px 5px 3px 8px;
     font-size: 13px;
   }
 
@@ -4039,7 +4187,7 @@ body.has-modal .toast-region {
   }
 
   .pd-date {
-    padding: 14px 10px;
+    padding: 8px 6px;
   }
 
   .pd-md {
@@ -4051,12 +4199,11 @@ body.has-modal .toast-region {
   }
 
   .pd-cell {
-    height: 76px;
-    padding: 10px;
+    padding: 8px 10px;
   }
 
   .pd-note-btn {
-    padding: 5px 8px;
+    padding: 4px 8px 4px 11px;
     font-size: 14px;
   }
 
